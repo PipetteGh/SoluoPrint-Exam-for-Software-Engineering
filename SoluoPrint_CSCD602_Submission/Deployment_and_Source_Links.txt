@@ -1,0 +1,14 @@
+Student Name: Ernesto Beng / P. Borngreat Mensah
+Student ID: 10954321
+Project Title: SoluoPrint - Ultimate Print Shop Management & Analytics Platform
+
+Live Application: https://ekon.soluotech.com
+Admin URL: https://ekon.soluotech.com/login
+
+Test Username: cust-demo@soluotech.com (or CUST-1001)
+Test Password: Password@1
+
+Admin Username: pborngreatmensah@gmail.com (or ernestobeng@gmail.com)
+Admin Password: Pa$$w0rd (or Provider@1)
+
+Source Code Repository: Provided in submitted ZIP package under Supporting_Files/

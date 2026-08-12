@@ -1,18 +1,14 @@
-SoluoPrint - CSCD 602 Advanced Software Engineering Project
+Student Name: Ernesto Beng / P. Borngreat Mensah
+Student ID: 10954321
+Project Title: SoluoPrint - Ultimate Print Shop Management & Analytics Platform
 
-1. Source Code Links:
-- The full source code is provided in the submitted directory alongside this file.
-- It includes the complete React frontend codebase, Supabase edge functions, and python generation scripts for documents.
+Live Application: https://ekon.soluotech.com
+Admin URL: https://ekon.soluotech.com/login
 
-2. Live Deployment URLs:
-- Main Application Dashboard: https://ekon.soluotech.com
-- Backend Services: Supabase (managed)
+Test Username: cust-demo@soluotech.com (or CUST-1001)
+Test Password: Password@1
 
-3. Admin Demo Details for Grading:
-- Login URL: https://ekon.soluotech.com/login
-- Username/Email: pborngreatmensah@gmail.com
-- Password: Pa$$w0rd
+Admin Username: pborngreatmensah@gmail.com (or ernestobeng@gmail.com)
+Admin Password: Pa$$w0rd (or Provider@1)
 
-4. Noteworthy Setup:
-- SMS Integration is fully active (SMSGH SMSAPI).
-- Email authentication has been correctly enforced to ensure security compliance (Step 0 fix implemented).
+Source Code Repository: Provided in submitted ZIP package under Supporting_Files/

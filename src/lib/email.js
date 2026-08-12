@@ -15,6 +15,7 @@ const getApiUrl = () => {
  * @param {string} senderName - Name of the sender (e.g., Company Name)
  */
 export async function sendEmail(to, subject, message, senderName = 'SoluoPrint') {
+
   if (!to || !message) return { success: false, error: 'Recipient or message missing' }
 
   try {
@@ -23,7 +24,7 @@ export async function sendEmail(to, subject, message, senderName = 'SoluoPrint')
     // In dev, the Vite proxy might not exist for /api. 
     // We assume the PHP files are accessible at /api/send_email.php relative to the web root.
     let url = `${baseUrl}/api/send_email.php`;
-    
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -39,7 +40,7 @@ export async function sendEmail(to, subject, message, senderName = 'SoluoPrint')
 
     const data = await response.json()
     if (!response.ok) throw new Error(data.error || 'Failed to send email')
-    
+
     return { success: true, data }
   } catch (error) {
     console.error('Email Error:', error)
