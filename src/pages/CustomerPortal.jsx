@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight, LayoutDashboard, User } from 'lucide-react'
 import SEO from '../components/ui/SEO'
 import CustomerJobUploadModal from '../components/modals/CustomerJobUploadModal'
 import CustomerPaymentModal from '../components/modals/CustomerPaymentModal'
@@ -14,9 +14,23 @@ import { Bar, Doughnut, Line } from 'react-chartjs-2'
 
 ChartJS.register(ArcElement, Filler, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend)
 
+// White background plugin for chart canvases
+const whiteBackgroundPlugin = {
+  id: 'customCanvasBackgroundColor',
+  beforeDraw: (chart) => {
+    const { ctx } = chart
+    ctx.save()
+    ctx.globalCompositeOperation = 'destination-over'
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, chart.width, chart.height)
+    ctx.restore()
+  }
+}
+
 export default function CustomerPortal() {
   const [customer, setCustomer] = useState(null)
   const [jobs, setJobs] = useState([])
+  const [payments, setPayments] = useState([])
   const [totalPayments, setTotalPayments] = useState(0)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
@@ -39,7 +53,7 @@ export default function CustomerPortal() {
   async function loadData() {
     const custId = localStorage.getItem('soluoprint_customer_id')
     if (!custId) {
-      navigate('/login')
+      navigate('/customer-login')
       return
     }
 
@@ -50,7 +64,7 @@ export default function CustomerPortal() {
       .single()
       
     if (custErr || !cust) {
-      navigate('/login')
+      navigate('/customer-login')
       return
     }
     setCustomer(cust)
@@ -78,9 +92,10 @@ export default function CustomerPortal() {
     // Fetch payments and calculate total amount
     const { data: paymentsData } = await supabase
       .from('payments')
-      .select('amount')
+      .select('amount,payment_date,payment_method')
       .eq('customer_id', custId)
 
+    setPayments(paymentsData || [])
     const totalPaid = (paymentsData || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
     setTotalPayments(totalPaid)
 
@@ -89,13 +104,13 @@ export default function CustomerPortal() {
 
   function handleLogout() {
     localStorage.removeItem('soluoprint_customer_id')
-    navigate('/login')
+    navigate('/customer-login')
   }
 
-  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>
+  // ---- ALL hooks BEFORE any conditional returns ----
 
-  const activeJobs = jobs.filter(j => j.status !== 'Completed' && j.status !== 'Delivered' && j.status !== 'completed' && j.status !== 'delivered')
-  const completedJobs = jobs.filter(j => j.status === 'Completed' || j.status === 'Delivered' || j.status === 'completed' || j.status === 'delivered')
+  const activeJobs = useMemo(() => jobs.filter(j => j.status !== 'Completed' && j.status !== 'Delivered' && j.status !== 'completed' && j.status !== 'delivered'), [jobs])
+  const completedJobs = useMemo(() => jobs.filter(j => j.status === 'Completed' || j.status === 'Delivered' || j.status === 'completed' || j.status === 'delivered'), [jobs])
   const currency = customer?.companies?.currency_symbol || '¢'
 
   // Search and Pagination logic
@@ -113,7 +128,7 @@ export default function CustomerPortal() {
 
   const totalPages = Math.ceil(filteredJobs.length / jobsPerPage) || 1
 
-  // Chart data
+  // Chart: Monthly Spending
   const monthlySpendingChart = useMemo(() => {
     const data = Array(12).fill(0)
     jobs.forEach(j => {
@@ -126,115 +141,247 @@ export default function CustomerPortal() {
     })
     return {
       labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-      datasets: [
-        {
-          label: 'Total Ordered',
-          data,
-          backgroundColor: '#3b82f6',
-          borderRadius: 4
-        }
-      ]
+      datasets: [{
+        label: 'Total Ordered',
+        data,
+        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+        borderColor: '#3b82f6',
+        borderWidth: 1,
+        borderRadius: 6
+      }]
     }
   }, [jobs])
+
+  // Chart: Job Status Distribution (Doughnut)
+  const jobStatusChart = useMemo(() => {
+    const statusCounts = {}
+    jobs.forEach(j => {
+      const s = j.status || 'Pending'
+      statusCounts[s] = (statusCounts[s] || 0) + 1
+    })
+    const labels = Object.keys(statusCounts)
+    const data = Object.values(statusCounts)
+    const colors = labels.map(l => {
+      const lower = l.toLowerCase()
+      if (lower === 'completed' || lower === 'delivered') return '#10b981'
+      if (lower === 'pending') return '#f59e0b'
+      if (lower === 'in progress' || lower === 'in-progress') return '#3b82f6'
+      if (lower === 'cancelled') return '#ef4444'
+      return '#8b5cf6'
+    })
+    return { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] }
+  }, [jobs])
+
+  // Chart: Payment Trend (Line)
+  const paymentTrendChart = useMemo(() => {
+    const monthData = Array(12).fill(0)
+    payments.forEach(p => {
+      if (p.payment_date) {
+        const d = new Date(p.payment_date)
+        if (d.getFullYear() === new Date().getFullYear()) {
+          monthData[d.getMonth()] += Number(p.amount) || 0
+        }
+      }
+    })
+    return {
+      labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      datasets: [{
+        label: 'Payments Made',
+        data: monthData,
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 4,
+        pointBackgroundColor: '#10b981'
+      }]
+    }
+  }, [payments])
+
+  // Chart: Category Distribution (Doughnut)
+  const categoryChart = useMemo(() => {
+    const catCounts = {}
+    jobs.forEach(j => {
+      const c = j.category || 'General'
+      catCounts[c] = (catCounts[c] || 0) + 1
+    })
+    const labels = Object.keys(catCounts)
+    const data = Object.values(catCounts)
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+    return { labels, datasets: [{ data, backgroundColor: colors.slice(0, labels.length), borderWidth: 0 }] }
+  }, [jobs])
+
+  // ---- NOW the loading guard ----
+  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>
 
   // Render different tabs
   const renderContent = () => {
     if (activeTab === 'dashboard') {
       return (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-            <h1 style={{ fontSize: '28px', margin: 0 }}>Welcome back to {customer.companies?.name}'s Portal, {customer.name.split(' ')[0]}!</h1>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
+            <h1 style={{ fontSize: '28px', margin: 0 }}>Welcome back, {customer.name.split(' ')[0]}!</h1>
             
             <button className="btn btn-primary" onClick={() => setShowUploadModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Plus size={18} /> Upload New Job
             </button>
           </div>
           
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-            <div className="card" style={{ padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <CreditCard size={24} />
-                </div>
-                <div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '4px' }}>Outstanding Balance</div>
-                  <div style={{ fontSize: '24px', fontWeight: 700 }}>{currency} {Number(customer.balance || 0).toFixed(2)}</div>
+          {/* Stat Cards - matching admin dashboard spacing */}
+          <div className="stat-grid" style={{ marginBottom: '32px' }}>
+            <div className="stat-card" style={{ position: 'relative' }}>
+              <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)' }}><CreditCard size={22} color="#ef4444" /></div>
+              <div className="stat-info">
+                <div className="stat-label">Outstanding Balance</div>
+                <div className="stat-value" style={{ color: Number(customer.balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
+                  {currency} {Number(customer.balance || 0).toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </div>
               </div>
               {Number(customer.balance) > 0 && gatewaysActive && (
                 <button 
-                  className="btn btn-primary" 
-                  style={{ padding: '6px 12px', fontSize: '14px' }}
+                  className="btn btn-primary btn-sm" 
+                  style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)' }}
                   onClick={() => setShowPaymentModal(true)}
                 >
-                  Pay Balance
+                  Pay Now
                 </button>
               )}
             </div>
             
-            <div className="card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Clock size={24} />
-              </div>
-              <div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '4px' }}>Active Jobs</div>
-                <div style={{ fontSize: '24px', fontWeight: 700 }}>{activeJobs.length}</div>
+            <div className="stat-card">
+              <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.1)' }}><Clock size={22} color="#f59e0b" /></div>
+              <div className="stat-info">
+                <div className="stat-label">Active Jobs</div>
+                <div className="stat-value">{activeJobs.length}</div>
               </div>
             </div>
 
-            <div className="card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <CheckCircle size={24} />
-              </div>
-              <div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '4px' }}>Completed Jobs</div>
-                <div style={{ fontSize: '24px', fontWeight: 700 }}>{completedJobs.length}</div>
+            <div className="stat-card">
+              <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.1)' }}><CheckCircle size={22} color="#10b981" /></div>
+              <div className="stat-info">
+                <div className="stat-label">Completed Jobs</div>
+                <div className="stat-value">{completedJobs.length}</div>
               </div>
             </div>
 
-            <div className="card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Receipt size={24} />
-              </div>
-              <div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '4px' }}>Total Payments</div>
-                <div style={{ fontSize: '24px', fontWeight: 700 }}>{currency} {Number(totalPayments).toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+            <div className="stat-card">
+              <div className="stat-icon" style={{ background: 'rgba(99, 102, 241, 0.1)' }}><Receipt size={22} color="#6366f1" /></div>
+              <div className="stat-info">
+                <div className="stat-label">Total Payments</div>
+                <div className="stat-value">{currency} {Number(totalPayments).toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
               </div>
             </div>
           </div>
 
-          <div className="card" style={{ padding: '20px 24px', marginBottom: '40px' }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: 600 }}>Your Monthly Spending ({new Date().getFullYear()})</h3>
-            <div style={{ height: '300px', width: '100%' }}>
-              <Bar 
-                data={monthlySpendingChart} 
-                options={{ 
-                  responsive: true, 
-                  maintainAspectRatio: false, 
-                  plugins: { legend: { display: false } }, 
-                  scales: { 
-                    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }, 
-                    x: { grid: { display: false } } 
-                  } 
-                }} 
-              />
+          {/* Charts Row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+            <div className="card">
+              <div className="card-header"><div className="card-title">Monthly Spending ({new Date().getFullYear()})</div></div>
+              <div className="card-body" style={{ height: '300px' }}>
+                <Bar 
+                  data={monthlySpendingChart} 
+                  plugins={[whiteBackgroundPlugin]}
+                  options={{ 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { legend: { display: false } }, 
+                    scales: { 
+                      y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }, 
+                      x: { grid: { display: false } } 
+                    } 
+                  }} 
+                />
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-header"><div className="card-title">Payment Trend ({new Date().getFullYear()})</div></div>
+              <div className="card-body" style={{ height: '300px' }}>
+                <Line 
+                  data={paymentTrendChart}
+                  plugins={[whiteBackgroundPlugin]}
+                  options={{ 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { legend: { display: false } }, 
+                    scales: { 
+                      y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }, 
+                      x: { grid: { display: false } } 
+                    } 
+                  }} 
+                />
+              </div>
             </div>
           </div>
 
+          {/* Second Charts Row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+            <div className="card">
+              <div className="card-header"><div className="card-title">Job Status Distribution</div></div>
+              <div className="card-body" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '280px' }}>
+                {jobs.length > 0 ? (
+                  <Doughnut 
+                    data={jobStatusChart}
+                    plugins={[whiteBackgroundPlugin]}
+                    options={{ 
+                      responsive: true, 
+                      maintainAspectRatio: false, 
+                      cutout: '60%',
+                      plugins: { 
+                        legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle' } } 
+                      } 
+                    }} 
+                  />
+                ) : (
+                  <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <FileText size={40} style={{ opacity: 0.2, marginBottom: '8px' }} />
+                    <p>No jobs yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-header"><div className="card-title">Job Categories</div></div>
+              <div className="card-body" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '280px' }}>
+                {jobs.length > 0 ? (
+                  <Doughnut 
+                    data={categoryChart}
+                    plugins={[whiteBackgroundPlugin]}
+                    options={{ 
+                      responsive: true, 
+                      maintainAspectRatio: false, 
+                      cutout: '60%',
+                      plugins: { 
+                        legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle' } } 
+                      } 
+                    }} 
+                  />
+                ) : (
+                  <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <FileText size={40} style={{ opacity: 0.2, marginBottom: '8px' }} />
+                    <p>No jobs yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Jobs Table */}
           <div className="card" style={{ padding: '0' }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Recent Print Jobs</h3>
+            <div className="card-header">
+              <div className="card-title">Recent Print Jobs</div>
               <button className="btn btn-ghost btn-sm" onClick={() => setActiveTab('jobs')}>View All</button>
             </div>
             
             {jobs.length === 0 ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <div style={{ padding: '60px 40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <FileText size={48} style={{ opacity: 0.2, margin: '0 auto 16px' }} />
                 <p>You have no print jobs yet.</p>
               </div>
             ) : (
-              <div className="table-responsive">
-                <table className="table">
+              <div className="table-container">
+                <table>
                   <thead>
                     <tr>
                       <th>Job Number</th>
@@ -291,7 +438,7 @@ export default function CustomerPortal() {
             </button>
           </div>
           <div className="card" style={{ padding: 0 }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="card-header">
               <div style={{ position: 'relative', width: '300px' }}>
                 <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
                 <input 
@@ -310,8 +457,8 @@ export default function CustomerPortal() {
                 <p>No jobs found.</p>
               </div>
             ) : (
-              <div className="table-responsive">
-                <table className="table">
+              <div className="table-container">
+                <table>
                   <thead>
                     <tr>
                       <th>Job Number</th>
@@ -428,10 +575,12 @@ export default function CustomerPortal() {
       
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-header" style={{ padding: '24px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'white' }}>{customer.companies?.name || 'SoluoPrint'}</h2>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', marginTop: '2px' }}>Customer Portal</div>
+        <div className="sidebar-header">
+          <div className="sidebar-logo" style={{ cursor: 'default' }}>
+            <div className="sidebar-logo-icon">{(customer.companies?.name || 'S')[0].toUpperCase()}</div>
+            <span className="sidebar-logo-text" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
+              {customer.companies?.name || 'SoluoPrint'}
+            </span>
           </div>
         </div>
 
@@ -440,7 +589,7 @@ export default function CustomerPortal() {
             className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} 
             onClick={() => { setActiveTab('dashboard'); setSidebarOpen(false) }}
           >
-            <Clock />
+            <LayoutDashboard />
             <span>Dashboard</span>
           </button>
           <button 
@@ -454,7 +603,7 @@ export default function CustomerPortal() {
             className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`} 
             onClick={() => { setActiveTab('profile'); setSidebarOpen(false) }}
           >
-            <CreditCard />
+            <User />
             <span>My Profile</span>
           </button>
           
@@ -482,10 +631,8 @@ export default function CustomerPortal() {
           </div>
         </header>
 
-        <main className="page-content" style={{ backgroundColor: 'var(--bg-light)' }}>
-          <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-            {renderContent()}
-          </div>
+        <main className="page-content">
+          {renderContent()}
         </main>
       </div>
 
@@ -495,7 +642,7 @@ export default function CustomerPortal() {
           onClose={() => setShowUploadModal(false)}
           onSuccess={() => {
             setShowUploadModal(false)
-            loadData() // Refresh jobs
+            loadData()
             setActiveTab('jobs')
           }}
         />
@@ -513,7 +660,7 @@ export default function CustomerPortal() {
           onSuccess={() => {
             setShowPaymentModal(false)
             setSelectedJobToPay(null)
-            loadData() // Refresh balance and data
+            loadData()
           }}
         />
       )}

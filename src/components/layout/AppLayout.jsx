@@ -66,8 +66,10 @@ export default function AppLayout() {
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <NavLink to="/dashboard" className="sidebar-logo">
-            <div className="sidebar-logo-icon">PD</div>
-            <span className="sidebar-logo-text">SoluoPrint</span>
+            <div className="sidebar-logo-icon">{companyInitial}</div>
+            <span className="sidebar-logo-text" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
+              {company?.name || 'SoluoPrint'}
+            </span>
           </NavLink>
           {/* Mobile Close Button */}
           <button className="icon-btn" style={{ marginLeft: 'auto', border: 'none', display: 'flex', color: 'white' }} onClick={() => setSidebarOpen(false)}>

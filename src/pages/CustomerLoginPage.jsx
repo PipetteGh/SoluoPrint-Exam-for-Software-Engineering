@@ -1,72 +1,83 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Users } from 'lucide-react'
 import SEO from '../components/ui/SEO'
+import { supabase } from '../lib/supabase'
 
-export default function LoginPage() {
-  const [email, setEmail] = useState('')
+export default function CustomerLoginPage() {
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const { customSignIn, finalizeCustomSignIn } = useAuth()
   const navigate = useNavigate()
 
-  async function handleCredentialsSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    
+
     try {
-      // Admin Custom Sign In (Bypass Supabase Native Auth)
-      if (typeof customSignIn !== 'function') {
-        throw new Error('Authentication service is initializing. Please refresh the page.')
+      // Normalize: accept with or without CUST- prefix
+      let normalizedUsername = username.trim().toUpperCase()
+      if (!normalizedUsername.startsWith('CUST-')) {
+        normalizedUsername = 'CUST-' + normalizedUsername
       }
 
-      const { data: profile, error: err } = await customSignIn(email, password)
-      if (err) {
-        setError(err.message)
+      const { data, error: custErr } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('username', normalizedUsername)
+        .eq('password', password)
+        .single()
+
+      if (custErr || !data) {
+        setError('Invalid username or password. Please check your credentials and try again.')
         setLoading(false)
         return
       }
 
-      await finalizeCustomSignIn(profile.id)
+      localStorage.setItem('soluoprint_customer_id', data.id)
       setLoading(false)
-      navigate('/dashboard')
-    } catch (e) {
-      console.error(e)
-      setError(e.message || 'An unexpected error occurred during authentication. Please try again.')
+      navigate('/customer')
+    } catch (err) {
+      console.error(err)
+      setError('An unexpected error occurred. Please try again.')
       setLoading(false)
     }
   }
 
   return (
     <div className="auth-page">
-      <SEO title="Sign In" description="Login to your SoluoPrint account to manage your print shop." />
+      <SEO title="Customer Login" description="Login to your customer portal to track print jobs and make payments." />
       <div className="auth-card">
         <div className="auth-logo">
-          <div className="auth-logo-icon">PD</div>
-          <span className="auth-logo-text">SoluoPrint</span>
+          <div className="auth-logo-icon" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+            <Users size={20} color="white" />
+          </div>
+          <span className="auth-logo-text">Customer Portal</span>
         </div>
 
-        <h1 className="auth-title">Welcome back</h1>
-        <p className="auth-subtitle">Sign in to your business account</p>
+        <h1 className="auth-title">Customer Login</h1>
+        <p className="auth-subtitle">Sign in to view your print jobs & payments</p>
 
         {error && <div className="error-alert">{error}</div>}
 
-        <form onSubmit={handleCredentialsSubmit}>
+        <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label">Email address</label>
+            <label className="form-label">Username</label>
             <input
-              type="email"
+              type="text"
               className="form-control"
-              placeholder="you@company.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              placeholder="Enter your username"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
               required
               autoFocus
             />
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Your username was provided by the print shop
+            </div>
           </div>
 
           <div className="form-group">
@@ -97,15 +108,13 @@ export default function LoginPage() {
             disabled={loading}
             style={{width:'100%',justifyContent:'center',padding:'10px',fontSize:'15px',marginTop:'4px'}}
           >
-            {loading ? 'Authenticating...' : 'Sign In'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
         <div className="auth-footer" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
-          <div>Don't have an account? <Link to="/register">Create one free</Link></div>
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px', width: '100%', textAlign: 'center', marginTop: '4px' }}>
-            <Link to="/customer-login" style={{ fontWeight: 600, color: '#10b981' }}>Login as a Customer →</Link>
-          </div>
+          <div>Are you a business owner? <Link to="/login">Sign in here</Link></div>
+          <div>Don't have a business account? <Link to="/register">Create one free</Link></div>
         </div>
       </div>
     </div>
