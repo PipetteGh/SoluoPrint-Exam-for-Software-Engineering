@@ -3,8 +3,8 @@ import { supabase } from '../../lib/supabase'
 import { X, CreditCard, Smartphone, CheckCircle } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
 
-export default function CustomerPaymentModal({ onClose, onSuccess, customer, balance }) {
-  const [amount, setAmount] = useState(balance || 0)
+export default function CustomerPaymentModal({ onClose, onSuccess, customer, balance, job }) {
+  const [amount, setAmount] = useState(job ? job.balance : (balance || 0))
   const [gateways, setGateways] = useState({ paystack: false, hubtel: false, flutterwave: false })
   const [selectedMethod, setSelectedMethod] = useState('')
   const [loading, setLoading] = useState(true)
@@ -12,6 +12,7 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
   const { showToast } = useToast()
   
   const currency = customer?.companies?.currency_symbol || '¢'
+  const maxAmount = job ? job.balance : balance
 
   useEffect(() => {
     async function loadGateways() {
@@ -44,7 +45,7 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
       showToast('Please select a payment method', 'error')
       return
     }
-    if (amount <= 0 || amount > balance) {
+    if (amount <= 0 || amount > maxAmount) {
       showToast('Please enter a valid amount', 'error')
       return
     }
@@ -72,6 +73,7 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
         .insert({
           company_id: customer.company_id,
           customer_id: customer.id,
+          job_id: job ? job.id : null,
           payment_account_id: accountId,
           amount: parseFloat(amount),
           payment_method: selectedMethod,
@@ -83,24 +85,38 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
       if (payErr) throw payErr
 
       // 3. Update Customer Balance
-      const newBalance = Number(customer.balance) - parseFloat(amount)
+      const newCustomerBalance = Number(customer.balance) - parseFloat(amount)
       await supabase
         .from('customers')
-        .update({ balance: newBalance })
+        .update({ balance: newCustomerBalance })
         .eq('id', customer.id)
+        
+      // 3.5 Update Job Balance if applicable
+      if (job) {
+        const newJobBalance = Number(job.balance) - parseFloat(amount)
+        const newJobAmountPaid = Number(job.amount_paid || 0) + parseFloat(amount)
+        const jobStatus = newJobBalance <= 0 ? (job.status === 'Pending' ? 'In Progress' : job.status) : job.status
+        
+        await supabase
+          .from('print_jobs')
+          .update({ balance: newJobBalance, amount_paid: newJobAmountPaid, status: jobStatus })
+          .eq('id', job.id)
+      }
 
       // 4. Send Confirmation Notification to Admin
       await supabase.from('notifications').insert({
         company_id: customer.company_id,
         title: 'Payment Received (Portal)',
-        message: `${customer.name} just paid ${currency}${amount} via ${selectedMethod}.`,
+        message: `${customer.name} just paid ${currency}${amount} via ${selectedMethod}${job ? ` for Job #${job.job_number}` : ''}.`,
         type: 'payment_received'
       })
 
       // 5. Optionally trigger the SMS / Email via the backend...
       try {
         const { notifyCustomer } = await import('../../lib/sms')
-        const msg = `your payment of: ${currency} ${amount} via ${selectedMethod} has been received. Your remaining balance is ${currency} ${newBalance.toFixed(2)}.`
+        const msg = job 
+          ? `your payment of ${currency} ${amount} for job ${job.job_number} via ${selectedMethod} has been received.` 
+          : `your payment of ${currency} ${amount} via ${selectedMethod} has been received. Your remaining balance is ${currency} ${newCustomerBalance.toFixed(2)}.`
         await notifyCustomer(customer.company_id, customer.id, 'payment_received', msg)
       } catch (e) {
         console.error('Failed to send sms', e)
@@ -127,14 +143,14 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '450px' }}>
         <div className="modal-header">
-          <h2 className="modal-title">Pay Outstanding Balance</h2>
+          <h2 className="modal-title">{job ? `Pay for Job #${job.job_number || 'N/A'}` : 'Pay Outstanding Balance'}</h2>
           <button className="btn-close" onClick={onClose}><X size={20} /></button>
         </div>
 
         <form onSubmit={handlePayment} className="modal-body">
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
             <p style={{ color: 'var(--text-muted)', margin: '0 0 8px' }}>Total Outstanding</p>
-            <h2 style={{ margin: 0, fontSize: '32px' }}>{currency} {Number(balance).toFixed(2)}</h2>
+            <h2 style={{ margin: 0, fontSize: '32px' }}>{currency} {Number(maxAmount).toFixed(2)}</h2>
           </div>
 
           {!hasGateways ? (

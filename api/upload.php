@@ -95,7 +95,7 @@ for ($i = 0; $i < $fileCount; $i++) {
     $mimeType = finfo_file($finfo, $tmpName);
     finfo_close($finfo);
 
-    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
+    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'application/pdf', 'image/tiff'];
     if (!in_array($mimeType, $allowedTypes)) {
         $errors[] = "Invalid file type for $name: $mimeType";
         continue;
@@ -106,8 +106,9 @@ for ($i = 0; $i < $fileCount; $i++) {
     $uniqueName = time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
     $destPath = $uploadDir . $uniqueName;
 
-    // Check if compression is needed (> 10MB)
-    if ($size > $maxSize) {
+    // Check if compression is needed (> 10MB) - only for web images
+    $isWebImage = in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp']);
+    if ($size > $maxSize && $isWebImage) {
         $compressed = compressImage($tmpName, $destPath, $mimeType, $maxWidth, $maxHeight, $jpegQuality);
         if (!$compressed) {
             // Fallback: just move the file

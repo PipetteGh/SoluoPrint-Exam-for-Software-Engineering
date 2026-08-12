@@ -10,6 +10,7 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
   const [form, setForm] = useState({ name: '', customer_type_id: '', phone: '', email: '', address: '', sms_notifications: false })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [successData, setSuccessData] = useState(null)
   const toast = useToast()
 
   useEffect(() => {
@@ -52,8 +53,11 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
       
       // If phone is provided, send SMS with credentials
       if (form.phone) {
-          const { sendSms } = await import('../../lib/sms')
-          await sendSms(form.phone, `Welcome! Login to your portal at ${loginUrl} | User: ${username} | Pass: ${password}`)
+          const { data: smsSettings } = await supabase.from('sms_settings').select('*').eq('company_id', company.id).single()
+          if (smsSettings && smsSettings.customer_welcome !== false) {
+            const { sendSms } = await import('../../lib/sms')
+            await sendSms(form.phone, `Welcome! Login to your portal at ${loginUrl} | User: ${username} | Pass: ${password}`, smsSettings)
+          }
       }
       
       // If email is provided, send Email with credentials
@@ -75,8 +79,39 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
     } else {
       toast.success('Customer added successfully')
       onSuccess?.(newCust)
-      onClose()
+      setSuccessData({ username, password })
     }
+  }
+
+  if (successData) {
+    return (
+      <div className="modal-overlay">
+        <div className="modal" style={{ maxWidth: '400px', textAlign: 'center' }}>
+          <div className="modal-body" style={{ padding: '32px 24px' }}>
+            <div style={{ color: '#16a34a', fontSize: '48px', marginBottom: '16px' }}>✓</div>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px' }}>Customer Created!</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '14px' }}>
+              The customer can log in to their portal using these credentials. Please share them securely if no email or phone was provided.
+            </p>
+            
+            <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: '8px', textAlign: 'left', marginBottom: '24px' }}>
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Username</div>
+                <div style={{ fontSize: '16px', fontWeight: '600', letterSpacing: '1px' }}>{successData.username}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Password</div>
+                <div style={{ fontSize: '16px', fontWeight: '600', letterSpacing: '1px' }}>{successData.password}</div>
+              </div>
+            </div>
+
+            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={onClose}>
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -93,7 +128,7 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
               <label className="form-label">Customer Name *</label>
               <input name="name" className="form-control" placeholder="Full name or business name" value={form.name} onChange={handleChange} required />
             </div>
-            <div className="form-row">
+            <div className="form-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
               <div className="form-group">
                 <label className="form-label">Customer Type</label>
                 <select name="customer_type_id" className="form-control" value={form.customer_type_id} onChange={handleChange}>

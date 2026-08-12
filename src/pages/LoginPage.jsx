@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
@@ -11,12 +11,51 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [otp, setOtp] = useState('')
   const [generatedOtp, setGeneratedOtp] = useState('')
+  const [otpGeneratedAt, setOtpGeneratedAt] = useState(0)
+  const [resendTimer, setResendTimer] = useState(0)
   const [profileData, setProfileData] = useState(null)
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const { customSignIn, finalizeCustomSignIn } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    let interval = null
+    if (resendTimer > 0) {
+      interval = setInterval(() => setResendTimer(t => t - 1), 1000)
+    }
+    return () => clearInterval(interval)
+  }, [resendTimer])
+
+  async function sendOtpCode(isResend = false, profile = profileData) {
+    setLoading(true)
+    setError('')
+    try {
+      const code = Math.floor(100000 + Math.random() * 900000).toString()
+      setGeneratedOtp(code)
+      setOtpGeneratedAt(Date.now())
+      setResendTimer(60)
+      if (!isResend) setProfileData(profile)
+
+      const { sendEmail } = await import('../lib/email')
+      await sendEmail(
+        profile.email, 
+        'SoluoPrint Login Verification', 
+        `<p>Your login verification code is: <strong style="font-size:24px;">${code}</strong></p><p>If you did not request this, please secure your account immediately. This code expires in 20 minutes.</p>`, 
+        'SoluoPrint Security'
+      )
+      
+      // Removed SMS to prioritize email as requested by user
+      
+      if (!isResend) setStep(1)
+    } catch (e) {
+      console.error(e)
+      setError('Failed to send verification code. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function handleCredentialsSubmit(e) {
     e.preventDefault()
@@ -57,29 +96,11 @@ export default function LoginPage() {
         return
       }
 
-      // Valid credentials! Generate and send OTP for 2FA
-      const code = Math.floor(100000 + Math.random() * 900000).toString()
-      setGeneratedOtp(code)
-      setProfileData(profile)
-
-      const { sendEmail } = await import('../lib/email')
-      await sendEmail(
-        profile.email, 
-        'SoluoPrint Login Verification', 
-        `<p>Your login verification code is: <strong style="font-size:24px;">${code}</strong></p><p>If you did not request this, please secure your account immediately.</p>`, 
-        'SoluoPrint Security'
-      )
-      
-      if (profile.phone) {
-        const { sendSms } = await import('../lib/sms')
-        await sendSms(profile.phone, `Your SoluoPrint login verification code is: ${code}`)
-      }
-
-      setStep(1)
+      setLoading(false)
+      await sendOtpCode(false, profile)
     } catch (e) {
       console.error(e)
       setError(e.message || 'An unexpected error occurred during authentication. Please try again.')
-    } finally {
       setLoading(false)
     }
   }
@@ -88,8 +109,13 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     
+    if (Date.now() - otpGeneratedAt > 20 * 60 * 1000) {
+      setError('OTP has expired. Please request a new one.')
+      return
+    }
+
     if (otp !== generatedOtp) {
-      setError('Invalid OTP code. Please check your email or SMS.')
+      setError('Invalid OTP code. Please check your email.')
       return
     }
 
@@ -111,7 +137,7 @@ export default function LoginPage() {
         {step === 1 ? (
           <>
             <h1 className="auth-title">Two-Factor Authentication</h1>
-            <p className="auth-subtitle">We've sent a 6-digit code to {profileData?.email} {profileData?.phone && `and ${profileData?.phone}`}</p>
+            <p className="auth-subtitle">We've sent a 6-digit code to {profileData?.email}</p>
             
             {error && <div className="error-alert">{error}</div>}
 
@@ -133,9 +159,21 @@ export default function LoginPage() {
               <button type="submit" className="btn btn-primary" disabled={loading} style={{width:'100%',justifyContent:'center',padding:'10px',fontSize:'15px'}}>
                 {loading ? 'Verifying...' : 'Verify & Login'}
               </button>
-              <button type="button" onClick={() => setStep(0)} className="btn btn-outline" style={{width:'100%',justifyContent:'center',padding:'10px',fontSize:'15px',marginTop:'12px'}}>
-                Back
-              </button>
+              
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => sendOtpCode(true)} 
+                  disabled={resendTimer > 0 || loading}
+                  className="btn btn-outline" 
+                  style={{flex: 1, justifyContent:'center',padding:'10px',fontSize:'15px'}}
+                >
+                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
+                </button>
+                <button type="button" onClick={() => setStep(0)} className="btn btn-outline" style={{flex: 1, justifyContent:'center',padding:'10px',fontSize:'15px'}}>
+                  Back
+                </button>
+              </div>
             </form>
           </>
         ) : (

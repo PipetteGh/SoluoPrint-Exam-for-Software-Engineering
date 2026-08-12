@@ -123,7 +123,7 @@ export default function PaymentIntegrationsPage() {
             </label>
           </div>
           
-          <div className="form-row">
+          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
             <div className="form-group">
               <label className="form-label">Public Key</label>
               <input type="text" name="paystack_public_key" className="form-control" value={settings.paystack_public_key} onChange={handleChange} placeholder="pk_test_..." />
@@ -145,7 +145,7 @@ export default function PaymentIntegrationsPage() {
             </label>
           </div>
           
-          <div className="form-row">
+          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
             <div className="form-group">
               <label className="form-label">Client ID / Account Number</label>
               <input type="text" name="hubtel_client_id" className="form-control" value={settings.hubtel_client_id} onChange={handleChange} placeholder="..." />
@@ -167,7 +167,7 @@ export default function PaymentIntegrationsPage() {
             </label>
           </div>
           
-          <div className="form-row">
+          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
             <div className="form-group">
               <label className="form-label">Public Key</label>
               <input type="text" name="flutterwave_public_key" className="form-control" value={settings.flutterwave_public_key} onChange={handleChange} placeholder="FLWPUBK_TEST-..." />

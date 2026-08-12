@@ -1089,9 +1089,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .sidebar { width: 60px; }
-  .sidebar-logo-text, .nav-item span, .nav-group-label span { display: none; }
-  .main-content { margin-left: 60px; }
   .page-content { padding: 16px; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 1fr; }

@@ -4,30 +4,30 @@ import { X, Upload, File as FileIcon, XCircle } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
 
 export default function CustomerJobUploadModal({ onClose, onSuccess, customer }) {
-  const [form, setForm] = useState({ category: 'General', notes: '' })
-  const [file, setFile] = useState(null)
+  const [form, setForm] = useState({ category: 'General', notes: '', width: '', height: '', unit: 'ft', quantity: 1 })
+  const [files, setFiles] = useState([])
   const [loading, setLoading] = useState(false)
   const { showToast } = useToast()
 
   const CATEGORIES = ['Banner', 'Stickers', 'General Printing', 'Picture Frame', 'Apparel', 'Others']
+  const UNITS = ['ft', 'inch', 'cm', 'm']
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0])
+      setFiles(prev => [...prev, ...Array.from(e.target.files)])
     }
   }
 
-  const removeFile = () => {
-    setFile(null)
+  const removeFile = (index) => {
+    setFiles(files.filter((_, i) => i !== index))
   }
 
-  async function uploadFile(fileData) {
-    if (!fileData) return null
+  async function uploadFiles(fileArray) {
+    if (!fileArray || fileArray.length === 0) return []
     const formData = new FormData()
-    formData.append('images[]', fileData)
+    fileArray.forEach(f => formData.append('images[]', f))
     formData.append('company_id', customer.company_id)
     
-    // In dev, the Vite proxy might not exist for /api.
     const baseUrl = window.location.origin
     const url = `${baseUrl}/api/upload.php`
     
@@ -38,7 +38,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
       })
       const data = await response.json()
       if (data.success && data.uploaded && data.uploaded.length > 0) {
-        return data.uploaded[0].url
+        return data.uploaded.map(u => u.url)
       }
       throw new Error('Upload failed')
     } catch (e) {
@@ -49,15 +49,16 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!file) {
-      showToast('Please attach a file for your print job.', 'error')
+    if (files.length === 0) {
+      showToast('Please attach at least one file for your print job.', 'error')
       return
     }
 
     setLoading(true)
 
     try {
-      const fileUrl = await uploadFile(file)
+      const fileUrls = await uploadFiles(files)
+      const joinedUrls = fileUrls.join(',') // Join multiple URLs with comma
 
       // Insert job
       const jobPayload = {
@@ -65,8 +66,12 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
         customer_id: customer.id,
         category: form.category,
         notes: form.notes,
+        width: form.width ? parseFloat(form.width) : null,
+        height: form.height ? parseFloat(form.height) : null,
+        unit: form.unit,
+        quantity: parseInt(form.quantity, 10) || 1,
         status: 'Pending',
-        design_file_url: fileUrl,
+        design_file_url: joinedUrls,
         job_date: new Date().toISOString().split('T')[0],
         total_price: 0,
         balance: 0,
@@ -85,7 +90,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
       await supabase.from('notifications').insert({
         company_id: customer.company_id,
         title: 'New Customer Job Upload',
-        message: `${customer.name} just uploaded a new ${form.category} job.`,
+        message: `${customer.name} just uploaded a new ${form.category} job with ${files.length} file(s).`,
         type: 'job_created'
       })
 
@@ -100,13 +105,13 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: '500px' }}>
+      <div className="modal" style={{ maxWidth: '700px' }}>
         <div className="modal-header">
           <h2 className="modal-title">Upload New Job</h2>
           <button className="btn-close" onClick={onClose}><X size={20} /></button>
         </div>
         
-        <form onSubmit={handleSubmit} className="modal-body">
+        <form onSubmit={handleSubmit} className="modal-body" style={{ padding: '24px 32px' }}>
           <div className="form-group">
             <label className="form-label">Job Category</label>
             <select
@@ -118,53 +123,101 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
             </select>
           </div>
 
+          <div className="form-row-3" style={{ marginBottom: '16px' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Width (Optional)</label>
+              <input 
+                type="number" 
+                step="0.01" 
+                className="form-control" 
+                placeholder="e.g. 10" 
+                value={form.width} 
+                onChange={e => setForm({...form, width: e.target.value})} 
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Height (Optional)</label>
+              <input 
+                type="number" 
+                step="0.01" 
+                className="form-control" 
+                placeholder="e.g. 5" 
+                value={form.height} 
+                onChange={e => setForm({...form, height: e.target.value})} 
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Unit</label>
+              <select className="form-control" value={form.unit} onChange={e => setForm({...form, unit: e.target.value})}>
+                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+          </div>
+
           <div className="form-group">
-            <label className="form-label">Design File (PDF, PNG, JPG)</label>
+            <label className="form-label">Quantity</label>
+            <input 
+              type="number" 
+              className="form-control" 
+              min="1" 
+              value={form.quantity} 
+              onChange={e => setForm({...form, quantity: e.target.value})} 
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Design Files (PDF, JPG, TIFF, PNG, JPEG)</label>
             
-            {!file ? (
-              <div style={{
-                border: '2px dashed var(--border)',
-                borderRadius: '8px',
-                padding: '32px',
-                textAlign: 'center',
-                backgroundColor: 'var(--bg-light)',
-                cursor: 'pointer',
-                position: 'relative'
-              }}>
-                <input 
-                  type="file" 
-                  onChange={handleFileChange} 
-                  accept=".pdf,.png,.jpg,.jpeg,.webp"
-                  style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} 
-                />
-                <Upload size={32} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-                <p style={{ margin: 0, fontWeight: 500 }}>Click or drag file to upload</p>
-                <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>Max file size: 50MB</p>
-              </div>
-            ) : (
-              <div style={{
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                padding: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: 'var(--bg-light)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
-                  <FileIcon size={24} style={{ color: 'var(--primary)' }} />
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '14px', fontWeight: 500 }}>
-                    {file.name}
-                  </span>
-                </div>
-                <button type="button" onClick={removeFile} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', padding: '4px' }}>
-                  <XCircle size={20} />
-                </button>
+            <div style={{
+              border: '2px dashed var(--border)',
+              borderRadius: '8px',
+              padding: '32px',
+              textAlign: 'center',
+              backgroundColor: 'var(--bg-light)',
+              cursor: 'pointer',
+              position: 'relative',
+              marginBottom: '12px'
+            }}>
+              <input 
+                type="file" 
+                multiple
+                onChange={handleFileChange} 
+                accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif"
+                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 10 }} 
+              />
+              <Upload size={32} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
+              <p style={{ margin: 0, fontWeight: 500, fontSize: '15px' }}>Click or drag files to upload</p>
+              <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>Upload should not exceed 50MB. Quality is preserved.</p>
+            </div>
+
+            {files.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
+                {files.map((f, i) => (
+                  <div key={i} style={{
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    padding: '10px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: 'var(--bg-light)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
+                      <FileIcon size={20} style={{ color: 'var(--primary)' }} />
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px', fontWeight: 500 }}>
+                        {f.name}
+                      </span>
+                    </div>
+                    <button type="button" onClick={() => removeFile(i)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', padding: '4px' }}>
+                      <XCircle size={18} />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>
 
-          <div className="form-group">
+          <div className="form-group" style={{ marginTop: '16px' }}>
             <label className="form-label">Notes or Instructions (Optional)</label>
             <textarea
               className="form-control"
@@ -175,9 +228,9 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
             />
           </div>
 
-          <div className="modal-footer" style={{ marginTop: '24px' }}>
+          <div className="modal-footer" style={{ marginTop: '32px', borderTop: 'none', padding: 0 }}>
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={loading || !file}>
+            <button type="submit" className="btn btn-primary" disabled={loading || files.length === 0}>
               {loading ? 'Uploading...' : 'Submit Job'}
             </button>
           </div>

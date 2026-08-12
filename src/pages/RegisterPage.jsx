@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
@@ -9,11 +9,21 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ fullName: '', companyName: '', email: '', phone: '', password: '' })
   const [otp, setOtp] = useState('')
   const [generatedOtp, setGeneratedOtp] = useState('')
+  const [otpGeneratedAt, setOtpGeneratedAt] = useState(0)
+  const [resendTimer, setResendTimer] = useState(0)
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const { customSignUp } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    let interval = null
+    if (resendTimer > 0) {
+      interval = setInterval(() => setResendTimer(t => t - 1), 1000)
+    }
+    return () => clearInterval(interval)
+  }, [resendTimer])
 
   function handleChange(e) {
     setForm(f => ({ ...f, [e.target.name]: e.target.value }))
@@ -25,6 +35,29 @@ export default function RegisterPage() {
     if (!/[a-z]/.test(pw)) return 'Password must contain at least one lowercase letter'
     if (!/[!@#$%^&*(),.?":{}|<>]/.test(pw)) return 'Password must contain at least one symbol'
     return null
+  }
+
+  async function sendOtpCode(isResend = false) {
+    setLoading(true)
+    setError('')
+    try {
+      const code = Math.floor(100000 + Math.random() * 900000).toString()
+      setGeneratedOtp(code)
+      setOtpGeneratedAt(Date.now())
+      setResendTimer(60)
+
+      const { sendEmail } = await import('../lib/email')
+      await sendEmail(form.email, 'Your SoluoPrint Verification Code', `<p>Your verification code is: <strong style="font-size:24px;">${code}</strong></p><p>Please enter this code to complete your registration. This code expires in 20 minutes.</p>`, 'SoluoPrint')
+      
+      // Removed SMS to prioritize email as requested by user
+      
+      if (!isResend) setStep(1)
+    } catch (err) {
+      console.error(err)
+      setError('An error occurred during verification. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleDetailsSubmit(e) {
@@ -55,23 +88,12 @@ export default function RegisterPage() {
         setLoading(false)
         return
       }
-
-      const code = Math.floor(100000 + Math.random() * 900000).toString()
-      setGeneratedOtp(code)
-
-      const { sendEmail } = await import('../lib/email')
-      await sendEmail(form.email, 'Your SoluoPrint Verification Code', `<p>Your verification code is: <strong style="font-size:24px;">${code}</strong></p><p>Please enter this code to complete your registration.</p>`, 'SoluoPrint')
       
-      if (form.phone) {
-        const { sendSms } = await import('../lib/sms')
-        await sendSms(form.phone, `Your SoluoPrint verification code is: ${code}`)
-      }
-
-      setStep(1)
+      setLoading(false)
+      await sendOtpCode()
     } catch (err) {
       console.error(err)
       setError(err.message || 'An error occurred during verification. Please try again.')
-    } finally {
       setLoading(false)
     }
   }
@@ -80,8 +102,13 @@ export default function RegisterPage() {
     e.preventDefault()
     setError('')
     
+    if (Date.now() - otpGeneratedAt > 20 * 60 * 1000) {
+      setError('OTP has expired. Please request a new one.')
+      return
+    }
+
     if (otp !== generatedOtp) {
-      setError('Invalid OTP code. Please check your email or SMS.')
+      setError('Invalid OTP code. Please check your email.')
       return
     }
 
@@ -120,7 +147,7 @@ export default function RegisterPage() {
         {step === 1 && (
           <>
             <h1 className="auth-title">Verify your account</h1>
-            <p className="auth-subtitle">We've sent a 6-digit code to {form.email} {form.phone && `and ${form.phone}`}</p>
+            <p className="auth-subtitle">We've sent a 6-digit code to {form.email}</p>
             
             {error && <div className="error-alert">{error}</div>}
 
@@ -141,9 +168,21 @@ export default function RegisterPage() {
               <button type="submit" className="btn btn-primary" disabled={loading} style={{width:'100%',justifyContent:'center',padding:'10px',fontSize:'15px'}}>
                 {loading ? 'Verifying...' : 'Verify & Create Account'}
               </button>
-              <button type="button" onClick={() => setStep(0)} className="btn btn-outline" style={{width:'100%',justifyContent:'center',padding:'10px',fontSize:'15px',marginTop:'12px'}}>
-                Back
-              </button>
+              
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => sendOtpCode(true)} 
+                  disabled={resendTimer > 0 || loading}
+                  className="btn btn-outline" 
+                  style={{flex: 1, justifyContent:'center',padding:'10px',fontSize:'15px'}}
+                >
+                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
+                </button>
+                <button type="button" onClick={() => setStep(0)} className="btn btn-outline" style={{flex: 1, justifyContent:'center',padding:'10px',fontSize:'15px'}}>
+                  Back
+                </button>
+              </div>
             </form>
           </>
         )}

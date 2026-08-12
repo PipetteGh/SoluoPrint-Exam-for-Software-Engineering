@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
-import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, ChevronLeft, ChevronRight, Key } from 'lucide-react'
 import SEO from '../components/ui/SEO'
 import NewCustomerModal from '../components/modals/NewCustomerModal'
 import { TableSkeleton, StatSkeleton } from '../components/ui/Skeletons'
@@ -115,9 +115,11 @@ export default function CustomersPage() {
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [editCustomer, setEditCustomer] = useState(null)
+  const [viewCredentials, setViewCredentials] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selectedIds, setSelectedIds] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
+  const [generatingBulk, setGeneratingBulk] = useState(false)
   const itemsPerPage = 20
   const toast = useToast()
 
@@ -160,6 +162,45 @@ export default function CustomersPage() {
     } else {
       toast.success(`${selectedIds.length} customers deleted`)
       load()
+    }
+  }
+
+  async function bulkGenerateCredentials() {
+    if (!confirm(`Generate portal credentials for ${selectedIds.length} selected customers? (Existing credentials will not be overwritten)`)) return
+    setGeneratingBulk(true)
+    let generatedCount = 0
+    let failedCount = 0
+
+    const selectedCustomers = customers.filter(c => selectedIds.includes(c.id))
+    
+    for (const cust of selectedCustomers) {
+      if (!cust.username) {
+        const cleanName = cust.name.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase()
+        const randomNum = Math.floor(1000 + Math.random() * 9000)
+        const newUsername = `CUST-${cleanName || 'USER'}-${randomNum}`
+        const newPassword = Math.random().toString(36).slice(-8)
+        
+        const { error } = await supabase
+          .from('customers')
+          .update({ username: newUsername, password: newPassword })
+          .eq('id', cust.id)
+          
+        if (!error) {
+          generatedCount++
+        } else {
+          failedCount++
+        }
+      }
+    }
+    
+    setGeneratingBulk(false)
+    if (generatedCount > 0) {
+      toast.success(`Generated credentials for ${generatedCount} customers!`)
+      load()
+    } else if (failedCount > 0) {
+      toast.error(`Failed to generate for ${failedCount} customers.`)
+    } else {
+      toast.info('All selected customers already have credentials.')
     }
   }
 
@@ -238,6 +279,14 @@ export default function CustomersPage() {
             {selectedIds.length > 0 && (
               <div style={{display:'flex', alignItems:'center', gap:'8px', paddingLeft:'12px', borderLeft:'1px solid var(--border)'}}>
                 <span style={{fontSize:'13px', color:'var(--text-muted)'}}>{selectedIds.length} selected</span>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{padding:'4px 8px', fontSize:'12px'}} 
+                  onClick={bulkGenerateCredentials}
+                  disabled={generatingBulk}
+                >
+                  <Key size={14} /> {generatingBulk ? 'Generating...' : 'Generate Credentials'}
+                </button>
                 <button className="btn btn-secondary" style={{padding:'4px 8px', fontSize:'12px', color:'var(--error)'}} onClick={bulkDelete}>
                   <Trash2 size={14} /> Delete
                 </button>
@@ -289,8 +338,9 @@ export default function CustomersPage() {
                   <td><span className={`status-badge ${c.is_active ? 'completed' : 'cancelled'}`}>{c.is_active ? 'Active' : 'Inactive'}</span></td>
                   <td>
                     <div className="action-btns">
-                      <button className="action-btn" title="Edit" onClick={() => setEditCustomer(c)}><Edit /></button>
-                      <button className="action-btn danger" title="Delete" onClick={() => deleteCustomer(c.id)}><Trash2 /></button>
+                      <button className="action-btn" title="View Portal Credentials" onClick={() => setViewCredentials(c)}><Key size={16} /></button>
+                      <button className="action-btn" title="Edit" onClick={() => setEditCustomer(c)}><Edit size={16} /></button>
+                      <button className="action-btn danger" title="Delete" onClick={() => deleteCustomer(c.id)}><Trash2 size={16} /></button>
                     </div>
                   </td>
                 </tr>
@@ -348,6 +398,91 @@ export default function CustomersPage() {
 
       {showAdd && <NewCustomerModal onClose={() => setShowAdd(false)} onSuccess={load} />}
       {editCustomer && <EditCustomerModal customer={editCustomer} company={company} onClose={() => setEditCustomer(null)} onSuccess={load} />}
+
+      {viewCredentials && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Portal Credentials</h2>
+              <button className="modal-close" onClick={() => setViewCredentials(null)}><X /></button>
+            </div>
+            <div className="modal-body" style={{ padding: '24px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <Key size={24} />
+              </div>
+              <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>{viewCredentials.name}</h2>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '14px' }}>
+                Share these credentials with the customer so they can log in to their dedicated portal. Click to copy.
+              </p>
+              
+              <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: '8px', textAlign: 'left', marginBottom: '24px' }}>
+                {!viewCredentials.username ? (
+                  <div style={{ textAlign: 'center', padding: '16px' }}>
+                    <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>This customer does not have portal credentials yet.</p>
+                    <button 
+                      className="btn btn-primary"
+                      onClick={async () => {
+                        const cleanName = viewCredentials.name.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase()
+                        const randomNum = Math.floor(1000 + Math.random() * 9000)
+                        const newUsername = `CUST-${cleanName || 'USER'}-${randomNum}`
+                        const newPassword = Math.random().toString(36).slice(-8)
+                        
+                        const { error } = await supabase
+                          .from('customers')
+                          .update({ username: newUsername, password: newPassword })
+                          .eq('id', viewCredentials.id)
+                          
+                        if (!error) {
+                          toast.success('Credentials generated!')
+                          setViewCredentials({ ...viewCredentials, username: newUsername, password: newPassword })
+                          load() // Refresh table
+                        } else {
+                          toast.error('Failed to generate credentials')
+                        }
+                      }}
+                    >
+                      Generate Credentials
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Username</div>
+                      <div 
+                        style={{ fontSize: '16px', fontWeight: '600', letterSpacing: '1px', cursor: 'pointer', padding: '8px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '4px', display: 'inline-block' }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(viewCredentials.username || '')
+                          toast.success('Username copied to clipboard!')
+                        }}
+                        title="Click to copy username"
+                      >
+                        {viewCredentials.username || '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Password</div>
+                      <div 
+                        style={{ fontSize: '16px', fontWeight: '600', letterSpacing: '1px', cursor: 'pointer', padding: '8px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '4px', display: 'inline-block' }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(viewCredentials.password || '')
+                          toast.success('Password copied to clipboard!')
+                        }}
+                        title="Click to copy password"
+                      >
+                        {viewCredentials.password || '-'}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <button className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setViewCredentials(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

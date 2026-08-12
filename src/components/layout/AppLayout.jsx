@@ -11,6 +11,7 @@ import {
 import NewJobModal from '../modals/NewJobModal'
 import NewPaymentModal from '../modals/NewPaymentModal'
 import NewCustomerModal from '../modals/NewCustomerModal'
+import OnboardingTour from '../ui/OnboardingTour'
 
 export default function AppLayout() {
   const { user, profile, company, signOut, hasPermission } = useAuth()
@@ -223,6 +224,11 @@ export default function AppLayout() {
               <span>Settings</span>
             </NavLink>
           )}
+          
+          <button className="nav-item" onClick={handleSignOut} style={{ color: 'var(--error)', marginTop: 'auto' }}>
+            <LogOut />
+            <span>Logout</span>
+          </button>
         </nav>
 
         <div className="sidebar-footer" style={{ padding: '20px', marginTop: 'auto', fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', borderTop: '1px solid var(--border)' }}>
@@ -339,6 +345,52 @@ export default function AppLayout() {
       {showNewJob && <NewJobModal onClose={() => setShowNewJob(false)} />}
       {showNewPayment && <NewPaymentModal onClose={() => setShowNewPayment(false)} />}
       {showNewCustomer && <NewCustomerModal onClose={() => setShowNewCustomer(false)} />}
+
+      <OnboardingTour 
+        tourKey="onboarding_admin_v2" 
+        steps={[
+          { 
+            title: "Welcome to SoluoPrint!", 
+            content: "We're excited to have your print shop on board. This interactive tour will show you how to navigate the platform." 
+          },
+          { 
+            title: "Manage Customers", 
+            content: "Keep track of all your clients here. You can add new customers, view their balances, and even generate portal credentials for them.",
+            actionText: "Go to Customers",
+            actionPath: "/customers"
+          },
+          { 
+            title: "Single Print Jobs", 
+            content: "Create and track individual print orders. You can assign them to customers, set dimensions, quantities, and update statuses from Pending to Completed.",
+            actionText: "Go to Print Jobs",
+            actionPath: "/jobs"
+          },
+          { 
+            title: "Bulk Printing & Job List", 
+            content: "For a streamlined view of all your pending tasks, use the Job List. It's great for managing bulk printing queues and keeping your shop floor organized.",
+            actionText: "Go to Job List",
+            actionPath: "/job-list"
+          },
+          { 
+            title: "Accounting & Payments", 
+            content: "Record customer payments, track outstanding receivables, and log your daily business expenses here to keep your cash flow healthy.",
+            actionText: "Go to Payments",
+            actionPath: "/payments"
+          },
+          { 
+            title: "Business Reports", 
+            content: "Analyze your shop's performance with real-time revenue, expense, and profit/loss reports to make informed decisions.",
+            actionText: "Go to Reports",
+            actionPath: "/reports/revenue"
+          },
+          { 
+            title: "Settings & User Management", 
+            content: "Configure your payment integrations, SMS API keys, and manage your team/users from the main Settings page.",
+            actionText: "Go to Settings",
+            actionPath: "/settings"
+          }
+        ]} 
+      />
     </div>
   )
 }
