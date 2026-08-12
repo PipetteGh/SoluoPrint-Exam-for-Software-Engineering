@@ -1,0 +1,18 @@
+SoluoPrint - CSCD 602 Advanced Software Engineering Project
+
+1. Source Code Links:
+- The full source code is provided in the submitted directory alongside this file.
+- It includes the complete React frontend codebase, Supabase edge functions, and python generation scripts for documents.
+
+2. Live Deployment URLs:
+- Main Application Dashboard: https://ekon.soluotech.com
+- Backend Services: Supabase (managed)
+
+3. Admin Demo Details for Grading:
+- Login URL: https://ekon.soluotech.com/login
+- Username/Email: pborngreatmensah@gmail.com
+- Password: Pa$$w0rd
+
+4. Noteworthy Setup:
+- SMS Integration is fully active (SMSGH SMSAPI).
+- Email authentication has been correctly enforced to ensure security compliance (Step 0 fix implemented).
