@@ -6,16 +6,17 @@ Live Application: https://print.soluotech.com
 Admin Login URL: https://print.soluotech.com/login
 Customer Login URL: https://print.soluotech.com/customer-login
 
-Admin Username: pborngreatmensah@gmail.com
-Admin Password: Pa$$w0rd
+Admin Username: pborngreatmensah@gmail.com (or ernestobeng@gmail.com)
+Admin Password: Pa$$w0rd (or Provider@1)
 
-Test Customer Username: CUST-AGAT-2837 (or CUST-1001)
-Test Customer Password: n7qu7pqf (or Password@1)
+Test Customer Username: CUST-BENM-8564 (or CUST-AGAT-2837)
+Test Customer Password: r1i9kpvb (or n7qu7pqf)
 
 Deployment Infrastructure:
 - Web Host / Frontend & API: Namecheap cPanel Hosting (React 18 Production Build & PHP Proxy Services under /api/)
 - Database Infrastructure: Managed Supabase PostgreSQL Instance with Row Level Security (RLS) Policies
-- Telephony & SMS Gateway: smsonlineapi (SMSGH integration via src/lib/sms.js) for customer CRUD, job updates, payment receipts, & occasion notifications
+- Telephony & SMS Gateway: smsonlineapi / smsgh protocol (src/lib/sms.js) for customer CRUD, job updates, payment receipts, & occasion notifications
 - Mail Transfer Agent: Namecheap cPanel SMTP Server (notify@soluotech.com over SSL port 465 via api/send_email.php) for company verification & transactional emails
+- Digital Payment Gateways: Configured for Hubtel, Paystack, & Flutterwave integrations
 
 Source Code Repository: https://github.com/PipetteGh/SoluoPrint-Exam-for-Software-Engineering
