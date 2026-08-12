@@ -1,47 +1,51 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LogOut, FileText, CheckCircle, Clock, CreditCard } from 'lucide-react'
+import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus } from 'lucide-react'
 import SEO from '../components/ui/SEO'
+import CustomerJobUploadModal from '../components/modals/CustomerJobUploadModal'
+import CustomerPaymentModal from '../components/modals/CustomerPaymentModal'
 
 export default function CustomerPortal() {
   const [customer, setCustomer] = useState(null)
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
+    loadData()
+  }, [])
+
+  async function loadData() {
     const custId = localStorage.getItem('soluoprint_customer_id')
     if (!custId) {
       navigate('/login')
       return
     }
 
-    async function loadData() {
-      const { data: cust, error: custErr } = await supabase
-        .from('customers')
-        .select('*, companies(name, currency_symbol)')
-        .eq('id', custId)
-        .single()
-        
-      if (custErr || !cust) {
-        navigate('/login')
-        return
-      }
-      setCustomer(cust)
-
-      const { data: jobData } = await supabase
-        .from('print_jobs')
-        .select('*')
-        .eq('customer_id', custId)
-        .order('created_at', { ascending: false })
+    const { data: cust, error: custErr } = await supabase
+      .from('customers')
+      .select('*, companies(name, currency_symbol)')
+      .eq('id', custId)
+      .single()
       
-      setJobs(jobData || [])
-      setLoading(false)
+    if (custErr || !cust) {
+      navigate('/login')
+      return
     }
+    setCustomer(cust)
+
+    const { data: jobData } = await supabase
+      .from('print_jobs')
+      .select('*')
+      .eq('customer_id', custId)
+      .order('created_at', { ascending: false })
     
-    loadData()
-  }, [navigate])
+    setJobs(jobData || [])
+    setLoading(false)
+  }
 
   function handleLogout() {
     localStorage.removeItem('soluoprint_customer_id')
@@ -50,8 +54,8 @@ export default function CustomerPortal() {
 
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>
 
-  const activeJobs = jobs.filter(j => j.status !== 'completed' && j.status !== 'delivered')
-  const completedJobs = jobs.filter(j => j.status === 'completed' || j.status === 'delivered')
+  const activeJobs = jobs.filter(j => j.status !== 'Completed' && j.status !== 'Delivered' && j.status !== 'completed' && j.status !== 'delivered')
+  const completedJobs = jobs.filter(j => j.status === 'Completed' || j.status === 'Delivered' || j.status === 'completed' || j.status === 'delivered')
   const currency = customer?.companies?.currency_symbol || '¢'
 
   return (
@@ -74,18 +78,35 @@ export default function CustomerPortal() {
 
       {/* Main Content */}
       <main style={{ maxWidth: '1200px', margin: '40px auto', padding: '0 20px' }}>
-        <h1 style={{ fontSize: '28px', marginBottom: '24px' }}>Welcome back, {customer.name.split(' ')[0]}!</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h1 style={{ fontSize: '28px', margin: 0 }}>Welcome back, {customer.name.split(' ')[0]}!</h1>
+          
+          <button className="btn btn-primary" onClick={() => setShowUploadModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Plus size={18} /> Upload New Job
+          </button>
+        </div>
         
         {/* Stats Row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-          <div className="card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CreditCard size={24} />
+          <div className="card" style={{ padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <CreditCard size={24} />
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '4px' }}>Outstanding Balance</div>
+                <div style={{ fontSize: '24px', fontWeight: 700 }}>{currency} {Number(customer.balance || 0).toFixed(2)}</div>
+              </div>
             </div>
-            <div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '4px' }}>Outstanding Balance</div>
-              <div style={{ fontSize: '24px', fontWeight: 700 }}>{currency} {Number(customer.balance || 0).toFixed(2)}</div>
-            </div>
+            {Number(customer.balance) > 0 && (
+              <button 
+                className="btn btn-primary" 
+                style={{ padding: '6px 12px', fontSize: '14px' }}
+                onClick={() => setShowPaymentModal(true)}
+              >
+                Pay Balance
+              </button>
+            )}
           </div>
           
           <div className="card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -136,7 +157,10 @@ export default function CustomerPortal() {
                 <tbody>
                   {jobs.slice(0, 10).map(job => (
                     <tr key={job.id}>
-                      <td style={{ fontWeight: 500 }}>{job.job_number || 'N/A'}</td>
+                      <td style={{ fontWeight: 500 }}>
+                        {job.job_number || 'N/A'}
+                        {job.design_file_url && <a href={job.design_file_url} target="_blank" rel="noreferrer" style={{ marginLeft: '8px', fontSize: '12px', color: 'var(--primary)', textDecoration: 'none' }}>(File)</a>}
+                      </td>
                       <td>{job.category || 'General'}</td>
                       <td>{new Date(job.job_date).toLocaleDateString()}</td>
                       <td>
@@ -154,6 +178,29 @@ export default function CustomerPortal() {
           )}
         </div>
       </main>
+
+      {showUploadModal && (
+        <CustomerJobUploadModal 
+          customer={customer}
+          onClose={() => setShowUploadModal(false)}
+          onSuccess={() => {
+            setShowUploadModal(false)
+            loadData() // Refresh jobs
+          }}
+        />
+      )}
+
+      {showPaymentModal && (
+        <CustomerPaymentModal
+          customer={customer}
+          balance={customer.balance}
+          onClose={() => setShowPaymentModal(false)}
+          onSuccess={() => {
+            setShowPaymentModal(false)
+            loadData() // Refresh balance and data
+          }}
+        />
+      )}
     </div>
   )
 }

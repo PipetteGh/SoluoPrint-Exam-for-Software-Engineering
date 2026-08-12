@@ -58,7 +58,10 @@ create table public.customers (
   is_active boolean null default true,
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
+  username text null,
+  password text null,
   constraint customers_pkey primary key (id),
+  constraint customers_username_key unique (username),
   constraint customers_company_id_fkey foreign KEY (company_id) references companies (id) on delete CASCADE,
   constraint customers_customer_type_id_fkey foreign KEY (customer_type_id) references customer_types (id)
 ) TABLESPACE pg_default;

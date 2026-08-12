@@ -31,6 +31,7 @@ import PreferencesPage from './pages/settings/PreferencesPage'
 import SecurityPage from './pages/settings/SecurityPage'
 import SmsNotificationsPage from './pages/settings/SmsNotificationsPage'
 import DataBackupPage from './pages/settings/DataBackupPage'
+import PaymentIntegrationsPage from './pages/settings/PaymentIntegrationsPage'
 import ConnectivityManager from './components/ui/ConnectivityManager'
 import ErrorBoundary from './components/ui/ErrorBoundary'
 
@@ -110,6 +111,7 @@ function AppRoutes() {
         <Route path="settings/billing" element={<PermissionRoute permission="manage_settings"><BillingPage /></PermissionRoute>} />
         <Route path="settings/preferences" element={<PermissionRoute permission="manage_settings"><PreferencesPage /></PermissionRoute>} />
         <Route path="settings/security" element={<PermissionRoute permission="manage_settings"><SecurityPage /></PermissionRoute>} />
+        <Route path="settings/payments" element={<PermissionRoute permission="manage_settings"><PaymentIntegrationsPage /></PermissionRoute>} />
         <Route path="settings/sms" element={<PermissionRoute permission="manage_settings"><SmsNotificationsPage /></PermissionRoute>} />
         <Route path="settings/backup" element={<PermissionRoute permission="manage_settings"><DataBackupPage /></PermissionRoute>} />
       </Route>

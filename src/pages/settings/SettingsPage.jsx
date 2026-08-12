@@ -9,6 +9,7 @@ const SETTINGS_TILES = [
   { icon: CreditCard, title: 'Billing & Subscription', desc: 'Manage your plan and billing information', path: '/settings/billing', color: '#fee2e2', iconColor: '#ef4444' },
   { icon: Settings, title: 'Preferences', desc: 'Customize your app experience', path: '/settings/preferences', color: '#f3e8ff', iconColor: '#7c3aed' },
   { icon: Lock, title: 'Security & Authentication', desc: 'Manage password and security settings', path: '/settings/security', color: '#ecfeff', iconColor: '#0891b2' },
+  { icon: CreditCard, title: 'Payment Integrations', desc: 'Configure payment gateways (Paystack, Hubtel, etc)', path: '/settings/payments', color: '#f0f9ff', iconColor: '#0ea5e9' },
   { icon: MessageSquare, title: 'SMS Notifications', desc: 'Configure SMS alerts for customers', path: '/settings/sms', color: '#fff7ed', iconColor: '#ea580c' },
   { icon: Database, title: 'Data Backup', desc: 'Backup full database, import or export', path: '/settings/backup', color: '#f0fdf4', iconColor: '#16a34a' }
 ]
