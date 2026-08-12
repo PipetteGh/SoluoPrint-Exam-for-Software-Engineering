@@ -575,6 +575,7 @@ export default function DashboardPage() {
       paymentsCount: filteredPayments.length,
       totalJobsCount,
       incompleteJobsCount,
+      totalMonthJobsCount: thisMonthJobs.length,
       totalMonthIncoming,
       totalYearIncoming,
       totalYearOutgoing,
