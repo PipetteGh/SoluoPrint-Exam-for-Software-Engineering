@@ -20,20 +20,18 @@ import NewServiceModal from '../components/modals/NewServiceModal'
 import NewExpenseModal from '../components/modals/NewExpenseModal'
 import SEO from '../components/ui/SEO'
 
-ChartJS.register(ArcElement, Filler, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend)
-
 const customCanvasBackgroundColor = {
   id: 'customCanvasBackgroundColor',
-  beforeDraw: (chart, args, options) => {
-    const {ctx} = chart;
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-over';
-    ctx.fillStyle = options.color || '#ffffff';
-    ctx.fillRect(0, 0, chart.width, chart.height);
-    ctx.restore();
+  beforeDraw: (chart) => {
+    const { ctx, width, height } = chart
+    ctx.save()
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
+    ctx.restore()
   }
-};
-ChartJS.register(customCanvasBackgroundColor);
+}
+
+ChartJS.register(ArcElement, Filler, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend, customCanvasBackgroundColor)
 
 // ─── LARGE FORMAT CALCULATOR ───────────────────────────────────────
 const SIZE_PRESETS = [

@@ -12,20 +12,18 @@ import {
 } from 'chart.js'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 
-ChartJS.register(ArcElement, Filler, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend)
-
-// White background plugin for chart canvases
 const whiteBackgroundPlugin = {
   id: 'customCanvasBackgroundColor',
   beforeDraw: (chart) => {
-    const { ctx } = chart
+    const { ctx, width, height } = chart
     ctx.save()
-    ctx.globalCompositeOperation = 'destination-over'
     ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, chart.width, chart.height)
+    ctx.fillRect(0, 0, width, height)
     ctx.restore()
   }
 }
+
+ChartJS.register(ArcElement, Filler, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend, whiteBackgroundPlugin)
 
 export default function CustomerPortal() {
   const [customer, setCustomer] = useState(null)

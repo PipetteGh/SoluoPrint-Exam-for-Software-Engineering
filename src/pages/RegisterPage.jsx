@@ -46,10 +46,11 @@ export default function RegisterPage() {
       setOtpGeneratedAt(Date.now())
       setResendTimer(60)
 
-      const { sendEmail } = await import('../lib/email')
-      await sendEmail(form.email, 'Your SoluoPrint Verification Code', `<p>Your verification code is: <strong style="font-size:24px;">${code}</strong></p><p>Please enter this code to complete your registration. This code expires in 20 minutes.</p>`, 'SoluoPrint')
-      
-      // Removed SMS to prioritize email as requested by user
+      // Fire email in the background (don't await) so the UI doesn't freeze
+      import('../lib/email').then(({ sendEmail }) => {
+        sendEmail(form.email, 'Your SoluoPrint Verification Code', `<p>Your verification code is: <strong style="font-size:24px;">${code}</strong></p><p>Please enter this code to complete your registration. This code expires in 20 minutes.</p>`, 'SoluoPrint')
+          .catch(err => console.error('OTP email send error:', err))
+      })
       
       if (!isResend) setStep(1)
     } catch (err) {

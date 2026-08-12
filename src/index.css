@@ -1448,3 +1448,17 @@ input[type="checkbox"] {
     display: block;
   }
 }
+
+/* Force clean white background for all ChartJS canvas elements */
+canvas {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+}
+
+.chart-container canvas,
+.card-body canvas {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  border-radius: 6px;
+}
+

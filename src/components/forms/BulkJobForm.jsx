@@ -66,9 +66,9 @@ export default function BulkJobForm({ company, onBack, onSuccess }) {
     const w = parseFloat(item.width) || 0
     const h = parseFloat(item.height) || 0
     
-    // Check if it's large format based on category
+    // Check if it's large format or sticker based on category
     const selectedCategory = categories.find(c => c.name === item.activeCat)
-    const isLargeFormat = selectedCategory?.form_type === 'large_format' || item.activeCat === 'Large Format'
+    const isLargeFormat = selectedCategory?.form_type === 'large_format' || selectedCategory?.form_type === 'sticker' || item.activeCat === 'Large Format' || item.activeCat === 'Stickers' || item.activeCat?.toLowerCase().includes('sticker') || item.activeCat?.toLowerCase().includes('banner')
 
     const divisor = getSqFtDivisor(item.unit)
     const area = isLargeFormat && w > 0 && h > 0 ? ((w * h) / divisor) : 1
@@ -128,7 +128,7 @@ export default function BulkJobForm({ company, onBack, onSuccess }) {
     let breakdown = items.map(i => {
       const svc = services.find(s => s.id === i.service_id)
       const selectedCategory = categories.find(c => c.name === i.activeCat)
-      const isLargeFormat = selectedCategory?.form_type === 'large_format' || i.activeCat === 'Large Format'
+      const isLargeFormat = selectedCategory?.form_type === 'large_format' || selectedCategory?.form_type === 'sticker' || i.activeCat === 'Large Format' || i.activeCat === 'Stickers' || i.activeCat?.toLowerCase().includes('sticker') || i.activeCat?.toLowerCase().includes('banner')
       
       let dim = (isLargeFormat && i.width && i.height) ? ` (${i.width}×${i.height} ${i.unit})` : ''
       return `- ${svc?.name || 'Service'}${dim} (Qty: ${i.quantity}) : ${currency} ${calculateItemTotal(i).toFixed(2)}`
@@ -137,7 +137,7 @@ export default function BulkJobForm({ company, onBack, onSuccess }) {
     const itemsJson = JSON.stringify(items.map(i => {
       const svc = services.find(s => s.id === i.service_id)
       const selectedCategory = categories.find(c => c.name === i.activeCat)
-      const isLargeFormat = selectedCategory?.form_type === 'large_format' || i.activeCat === 'Large Format'
+      const isLargeFormat = selectedCategory?.form_type === 'large_format' || selectedCategory?.form_type === 'sticker' || i.activeCat === 'Large Format' || i.activeCat === 'Stickers' || i.activeCat?.toLowerCase().includes('sticker') || i.activeCat?.toLowerCase().includes('banner')
       return {
         service: svc?.name || 'Service',
         dim: (isLargeFormat && i.width && i.height) ? `${i.width}×${i.height} ${i.unit}` : '-',
@@ -257,7 +257,7 @@ export default function BulkJobForm({ company, onBack, onSuccess }) {
 
             {items.map((item, index) => {
               const selectedCategory = categories.find(c => c.name === item.activeCat)
-              const isLargeFormat = selectedCategory?.form_type === 'large_format' || item.activeCat === 'Large Format'
+              const isLargeFormat = selectedCategory?.form_type === 'large_format' || selectedCategory?.form_type === 'sticker' || item.activeCat === 'Large Format' || item.activeCat?.toLowerCase().includes('sticker')
 
               return (
                 <div key={item.id} style={{ border: '1px solid var(--border)', borderRadius: '10px', padding: '16px', marginBottom: '16px', position: 'relative', background: '#fafafa' }}>

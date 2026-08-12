@@ -64,6 +64,7 @@ import TourPage from './pages/marketing/TourPage'
 import PricingPage from './pages/marketing/PricingPage'
 import ContactPage from './pages/marketing/ContactPage'
 import CustomerPortal from './pages/CustomerPortal'
+import CustomerLoginPage from './pages/CustomerLoginPage'
 
 function AppRoutes() {
   return (
@@ -83,7 +84,8 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       
-      {/* Customer Portal Route (Custom Auth) */}
+      {/* Customer Login & Portal Routes (Custom Auth) */}
+      <Route path="/customer-login" element={<CustomerLoginPage />} />
       <Route path="/customer" element={<CustomerPortal />} />
       
       <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
