@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { BarChart2, TrendingUp, TrendingDown, Calendar } from 'lucide-react'
+import { BarChart2, TrendingUp, TrendingDown, Calendar, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Bar, Line, Doughnut } from 'react-chartjs-2'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
@@ -29,9 +29,12 @@ export default function ProfitLossPage() {
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Date filtering state - default to current year
+  // Date filtering, search & pagination state
   const [dateFrom, setDateFrom] = useState(`${new Date().getFullYear()}-01-01`)
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   const reportRef = useRef(null)
   const currency = company?.currency_symbol || '¢'
@@ -85,7 +88,7 @@ export default function ProfitLossPage() {
       monthsMap[key].expense += Number(e.amount) || 0
     })
 
-    const keys = Object.keys(monthsMap).sort()
+    const keys = Object.keys(monthsMap).sort().reverse()
     return keys.map(k => {
       const rev = monthsMap[k].revenue
       const exp = monthsMap[k].expense
@@ -104,17 +107,32 @@ export default function ProfitLossPage() {
     })
   }, [filteredPayments, filteredExpenses])
 
+  const searchedMonthlyData = useMemo(() => {
+    return monthlyData.filter(d => {
+      const m = d.month.toLowerCase()
+      const query = searchTerm.toLowerCase()
+      return m.includes(query)
+    })
+  }, [monthlyData, searchTerm])
+
+  const paginatedMonthlyData = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return searchedMonthlyData.slice(start, start + itemsPerPage)
+  }, [searchedMonthlyData, currentPage])
+
+  const totalPages = Math.ceil(searchedMonthlyData.length / itemsPerPage) || 1
+
   const totalRevenue = useMemo(() => filteredPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0), [filteredPayments])
   const totalExpense = useMemo(() => filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0), [filteredExpenses])
   const totalProfit = totalRevenue - totalExpense
 
   // Chart: Bar (Revenue vs Expense)
   const barChartData = {
-    labels: monthlyData.map(d => d.month),
+    labels: [...monthlyData].reverse().map(d => d.month),
     datasets: [
       {
         label: 'Revenue',
-        data: monthlyData.map(d => d.revenue),
+        data: [...monthlyData].reverse().map(d => d.revenue),
         backgroundColor: 'rgba(34, 197, 94, 0.8)',
         borderColor: '#22c55e',
         borderWidth: 1,
@@ -122,7 +140,7 @@ export default function ProfitLossPage() {
       },
       {
         label: 'Expenses',
-        data: monthlyData.map(d => d.expense),
+        data: [...monthlyData].reverse().map(d => d.expense),
         backgroundColor: 'rgba(239, 68, 68, 0.8)',
         borderColor: '#ef4444',
         borderWidth: 1,
@@ -133,17 +151,17 @@ export default function ProfitLossPage() {
 
   // Chart: Line (Net Profit Trend)
   const lineChartData = {
-    labels: monthlyData.map(d => d.month),
+    labels: [...monthlyData].reverse().map(d => d.month),
     datasets: [
       {
         label: 'Net Profit/Loss',
-        data: monthlyData.map(d => d.profit),
+        data: [...monthlyData].reverse().map(d => d.profit),
         borderColor: totalProfit >= 0 ? '#22c55e' : '#ef4444',
         backgroundColor: totalProfit >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
         fill: true,
         tension: 0.4,
         pointRadius: 5,
-        pointBackgroundColor: monthlyData.map(d => d.profit >= 0 ? '#22c55e' : '#ef4444')
+        pointBackgroundColor: [...monthlyData].reverse().map(d => d.profit >= 0 ? '#22c55e' : '#ef4444')
       }
     ]
   }
@@ -179,6 +197,7 @@ export default function ProfitLossPage() {
       setDateFrom('')
       setDateTo('')
     }
+    setCurrentPage(1)
   }
 
   return (
@@ -191,7 +210,7 @@ export default function ProfitLossPage() {
           <p className="page-subtitle">Financial performance overview and profitability trends</p>
         </div>
         <ExportToolbar 
-          tableData={monthlyData} 
+          tableData={searchedMonthlyData} 
           columns={exportColumns} 
           fileName={`Profit_Loss_Report_${dateFrom || 'all'}_to_${dateTo || 'all'}`}
           title={`Profit & Loss Report (${dateFrom || 'All Time'} - ${dateTo || 'Present'})`}
@@ -211,7 +230,7 @@ export default function ProfitLossPage() {
               className="form-control" 
               style={{ width: 'auto', fontSize: '13px' }} 
               value={dateFrom} 
-              onChange={e => setDateFrom(e.target.value)} 
+              onChange={e => { setDateFrom(e.target.value); setCurrentPage(1); }} 
             />
             <span style={{ color: 'var(--text-muted)' }}>to</span>
             <input 
@@ -219,7 +238,7 @@ export default function ProfitLossPage() {
               className="form-control" 
               style={{ width: 'auto', fontSize: '13px' }} 
               value={dateTo} 
-              onChange={e => setDateTo(e.target.value)} 
+              onChange={e => { setDateTo(e.target.value); setCurrentPage(1); }} 
             />
           </div>
 
@@ -322,8 +341,21 @@ export default function ProfitLossPage() {
         )}
 
         {/* Monthly P&L Breakdown Table */}
-        <div className="card">
-          <div className="card-header"><div className="card-title">Monthly P&amp;L Breakdown</div></div>
+        <div className="card" style={{ padding: 0 }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div className="card-title">Monthly P&amp;L Breakdown ({searchedMonthlyData.length})</div>
+            <div style={{ position: 'relative', width: '280px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                className="form-control" 
+                placeholder="Search months..." 
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                style={{ paddingLeft: '36px', height: '36px', fontSize: '13px' }}
+              />
+            </div>
+          </div>
           <div className="table-container">
             <table>
               <thead>
@@ -332,10 +364,10 @@ export default function ProfitLossPage() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={4} style={{ textAlign: 'center', padding: '40px' }}>Loading financial data...</td></tr>
-                ) : monthlyData.length === 0 ? (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No financial records found for the selected date range.</td></tr>
+                ) : searchedMonthlyData.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No financial records found matching search query.</td></tr>
                 ) : (
-                  monthlyData.map(d => (
+                  paginatedMonthlyData.map(d => (
                     <tr key={d.monthKey}>
                       <td style={{ fontWeight: 600 }}>{d.month}</td>
                       <td style={{ color: 'var(--success)', fontWeight: 600 }}>{currency} {d.revenue.toFixed(2)}</td>
@@ -349,6 +381,30 @@ export default function ProfitLossPage() {
               </tbody>
             </table>
           </div>
+
+          {searchedMonthlyData.length > 0 && (
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, searchedMonthlyData.length)} of {searchedMonthlyData.length} records
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft size={16} /> Prev
+                </button>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

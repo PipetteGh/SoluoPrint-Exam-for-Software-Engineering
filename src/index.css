@@ -1360,10 +1360,15 @@ input[type="checkbox"] {
   .grid-8 { grid-template-columns: repeat(4, 1fr); }
 }
 
+@media (max-width: 1200px) {
+  .grid-2 { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 1024px) {
   .grid-8 { grid-template-columns: repeat(2, 1fr); }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
   .grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .grid-2 { grid-template-columns: 1fr; }
   
   :root {
     --sidebar-width: 200px;

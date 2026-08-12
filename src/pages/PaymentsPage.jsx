@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { CreditCard, Plus, Trash2, Calendar } from 'lucide-react'
+import { CreditCard, Plus, Trash2, Calendar, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import NewPaymentModal from '../components/modals/NewPaymentModal'
 import { TableSkeleton, StatSkeleton } from '../components/ui/Skeletons'
 import SEO from '../components/ui/SEO'
@@ -32,6 +32,9 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState(`${new Date().getFullYear()}-01-01`)
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   const reportRef = useRef(null)
   const currency = company?.currency_symbol || '¢'
@@ -55,6 +58,24 @@ export default function PaymentsPage() {
       return true
     })
   }, [payments, dateFrom, dateTo])
+
+  const searched = useMemo(() => {
+    return filtered.filter(p => {
+      const cust = (p.customers?.name || '').toLowerCase()
+      const method = (p.payment_method || '').toLowerCase()
+      const account = (p.payment_accounts?.name || '').toLowerCase()
+      const notes = (p.notes || '').toLowerCase()
+      const query = searchTerm.toLowerCase()
+      return cust.includes(query) || method.includes(query) || account.includes(query) || notes.includes(query)
+    })
+  }, [filtered, searchTerm])
+
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return searched.slice(start, start + itemsPerPage)
+  }, [searched, currentPage])
+
+  const totalPages = Math.ceil(searched.length / itemsPerPage) || 1
 
   const stats = useMemo(() => {
     const total = filtered.reduce((s, p) => s + (Number(p.amount) || 0), 0)
@@ -139,7 +160,7 @@ export default function PaymentsPage() {
   ]
 
   const exportTableData = useMemo(() => {
-    return filtered.map(p => ({
+    return searched.map(p => ({
       payment_date: p.payment_date,
       customer_name: p.customers?.name || '-',
       amount: Number(p.amount) || 0,
@@ -147,7 +168,7 @@ export default function PaymentsPage() {
       account_name: p.payment_accounts?.name || '-',
       notes: p.notes || '-'
     }))
-  }, [filtered])
+  }, [searched])
 
   function setPreset(type) {
     const now = new Date()
@@ -162,6 +183,7 @@ export default function PaymentsPage() {
       setDateFrom('')
       setDateTo('')
     }
+    setCurrentPage(1)
   }
 
   return (
@@ -194,7 +216,7 @@ export default function PaymentsPage() {
               className="form-control" 
               style={{ width: 'auto', fontSize: '13px' }} 
               value={dateFrom} 
-              onChange={e => setDateFrom(e.target.value)} 
+              onChange={e => { setDateFrom(e.target.value); setCurrentPage(1); }} 
             />
             <span style={{ color: 'var(--text-muted)' }}>to</span>
             <input 
@@ -202,7 +224,7 @@ export default function PaymentsPage() {
               className="form-control" 
               style={{ width: 'auto', fontSize: '13px' }} 
               value={dateTo} 
-              onChange={e => setDateTo(e.target.value)} 
+              onChange={e => { setDateTo(e.target.value); setCurrentPage(1); }} 
             />
           </div>
 
@@ -310,9 +332,20 @@ export default function PaymentsPage() {
           </>
         )}
 
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Payment Records ({filtered.length})</div>
+        <div className="card" style={{ padding: 0 }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div className="card-title">Payment Records ({searched.length})</div>
+            <div style={{ position: 'relative', width: '280px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                className="form-control" 
+                placeholder="Search payments..." 
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                style={{ paddingLeft: '36px', height: '36px', fontSize: '13px' }}
+              />
+            </div>
           </div>
           <div className="table-container">
             <table>
@@ -324,9 +357,9 @@ export default function PaymentsPage() {
               <tbody>
                 {loading ? (
                   <TableSkeleton columns={7} rows={5} />
-                ) : filtered.length === 0 ? (
-                  <tr><td colSpan={7}><div className="empty-state"><CreditCard/><h3>No payments</h3><p>Record your first payment or adjust date filter</p></div></td></tr>
-                ) : filtered.map(p => (
+                ) : searched.length === 0 ? (
+                  <tr><td colSpan={7}><div className="empty-state"><CreditCard/><h3>No payments</h3><p>Record your first payment or adjust search/filters</p></div></td></tr>
+                ) : paginated.map(p => (
                   <tr key={p.id}>
                     <td style={{fontSize:'12px', fontWeight:500}}>{p.payment_date}</td>
                     <td style={{fontWeight:600}}>{p.customers?.name || '-'}</td>
@@ -344,6 +377,30 @@ export default function PaymentsPage() {
               </tbody>
             </table>
           </div>
+
+          {searched.length > 0 && (
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, searched.length)} of {searched.length} records
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft size={16} /> Prev
+                </button>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

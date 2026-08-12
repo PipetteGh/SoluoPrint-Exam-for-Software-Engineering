@@ -16,14 +16,21 @@ import SEO from '../components/ui/SEO'
 // Categories are loaded dynamically from service_categories table
 const JOB_STATUSES = ['Pending', 'In Progress', 'Completed', 'Cancelled', 'Overdue']
 const SIZE_PRESETS = [
-  { label: 'Custom Size', w: '', h: '' },
-  { label: 'A4 (8.3 × 11.7)', w: 8.3, h: 11.7 },
-  { label: 'A3 (11.7 × 16.5)', w: 11.7, h: 16.5 },
-  { label: 'A2 (16.5 × 23.4)', w: 16.5, h: 23.4 },
-  { label: 'A1 (23.4 × 33.1)', w: 23.4, h: 33.1 },
-  { label: '2×3 ft Banner', w: 2, h: 3 },
-  { label: '3×5 ft Banner', w: 3, h: 5 },
-  { label: '4×6 ft Banner', w: 4, h: 6 },
+  { label: 'Custom Size', w: '', h: '', unit: 'ft' },
+  { label: 'A4 (8.3 × 11.7 in)', w: 8.3, h: 11.7, unit: 'inch' },
+  { label: 'A3 (11.7 × 16.5 in)', w: 11.7, h: 16.5, unit: 'inch' },
+  { label: 'A2 (16.5 × 23.4 in)', w: 16.5, h: 23.4, unit: 'inch' },
+  { label: 'A1 (23.4 × 33.1 in)', w: 23.4, h: 33.1, unit: 'inch' },
+  { label: 'A0 (33.1 × 46.8 in)', w: 33.1, h: 46.8, unit: 'inch' },
+  { label: 'Sticker 2 × 2 in', w: 2, h: 2, unit: 'inch' },
+  { label: 'Sticker 3 × 3 in', w: 3, h: 3, unit: 'inch' },
+  { label: 'Sticker 4 × 4 in', w: 4, h: 4, unit: 'inch' },
+  { label: 'Sticker A4 Sheet', w: 8.3, h: 11.7, unit: 'inch' },
+  { label: 'Sticker A3 Sheet', w: 11.7, h: 16.5, unit: 'inch' },
+  { label: 'Banner 2 × 3 ft', w: 2, h: 3, unit: 'ft' },
+  { label: 'Banner 3 × 5 ft', w: 3, h: 5, unit: 'ft' },
+  { label: 'Banner 4 × 6 ft', w: 4, h: 6, unit: 'ft' },
+  { label: 'Banner 6 × 10 ft', w: 6, h: 10, unit: 'ft' },
 ]
 
 // ─── JOB CREATION/EDIT FORM (full page) ───────────────────────────
@@ -35,6 +42,7 @@ function JobForm({ job, company, initialCategory, onBack, onSuccess }) {
   const [showNewService, setShowNewService] = useState(false)
   const [services, setServices] = useState([])
   const [profiles, setProfiles] = useState([])
+  const [dbPresets, setDbPresets] = useState([])
   const [tracked, setTracked] = useState(true)
   const [form, setForm] = useState({
     job_date: job?.job_date || new Date().toISOString().split('T')[0],
@@ -69,17 +77,30 @@ function JobForm({ job, company, initialCategory, onBack, onSuccess }) {
       setCategories(cats)
       if (!activeCat && cats.length > 0) setActiveCat(initialCategory || cats[0].name)
     })
+    supabase.from('preset_sizes').select('*').eq('company_id', company.id).order('sort_order', { ascending: true }).then(({ data }) => setDbPresets(data || []))
   }, [company])
 
   function loadCustomers() {
     supabase.from('customers').select('id,name').eq('company_id', company.id).order('name').then(({ data }) => setCustomers(data || []))
   }
 
+  const allPresets = [
+    ...dbPresets.map(p => ({
+      label: p.name || `${p.width}×${p.height} ${p.unit}`,
+      w: p.width,
+      h: p.height,
+      unit: p.unit || 'ft',
+      price: p.price || p.unit_price
+    })),
+    ...SIZE_PRESETS
+  ]
+
   function getSqFtDivisor(unit) {
-    if (unit === 'ft') return 1
-    if (unit === 'inch') return 144
-    if (unit === 'cm') return 929.03
-    if (unit === 'm') return 0.0929
+    if (unit === 'ft' || unit === 'feet') return 1
+    if (unit === 'inch' || unit === 'inches' || unit === 'in') return 144
+    if (unit === 'cm') return 929.0304
+    if (unit === 'mm') return 92903.04
+    if (unit === 'm') return 0.09290304
     return 1
   }
 
@@ -111,8 +132,16 @@ function JobForm({ job, company, initialCategory, onBack, onSuccess }) {
   }
 
   function handlePreset(e) {
-    const preset = SIZE_PRESETS[parseInt(e.target.value)]
-    if (preset.w) { setForm(f => ({ ...f, width: String(preset.w), height: String(preset.h) })) }
+    const idx = parseInt(e.target.value)
+    const preset = allPresets[idx]
+    if (!preset) return
+    setForm(f => ({
+      ...f,
+      width: preset.w !== '' && preset.w !== undefined && preset.w !== null ? String(preset.w) : f.width,
+      height: preset.h !== '' && preset.h !== undefined && preset.h !== null ? String(preset.h) : f.height,
+      unit: preset.unit || f.unit,
+      unit_price: (preset.price || preset.unit_price) ? String(preset.price || preset.unit_price) : f.unit_price
+    }))
   }
 
   async function handleSubmit(createNew = false) {
@@ -309,7 +338,7 @@ function JobForm({ job, company, initialCategory, onBack, onSuccess }) {
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label" style={{ fontSize: '11px' }}>Size Preset</label>
                   <select className="form-control" onChange={handlePreset} style={{ fontSize: '12px' }}>
-                    {SIZE_PRESETS.map((p, i) => <option key={i} value={i}>{p.label}</option>)}
+                    {allPresets.map((p, i) => <option key={i} value={i}>{p.label}</option>)}
                   </select>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -323,7 +352,7 @@ function JobForm({ job, company, initialCategory, onBack, onSuccess }) {
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label" style={{ fontSize: '11px' }}>Unit</label>
                   <select name="unit" className="form-control" style={{ fontSize: '12px' }} value={form.unit} onChange={handleChange} disabled={form.is_custom_price}>
-                    {['ft', 'inch', 'm', 'cm'].map(u => <option key={u}>{u}</option>)}
+                    {['ft', 'inch', 'cm', 'mm', 'm'].map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
                 </div>
               </div>

@@ -916,7 +916,7 @@ export default function DashboardPage() {
                       options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }, x: { grid: { display: false } } } }} 
                     />
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '10px 16px', fontSize: '11px', color: 'var(--text-muted)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '2px' }}></div> Income <span style={{ fontWeight: 600, color: '#16a34a' }}>{currency}{metrics.totalYearIncoming.toFixed(2)}</span></div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', background: '#ef4444', borderRadius: '2px' }}></div> Expenses <span style={{ fontWeight: 600, color: '#dc2626' }}>{currency}{metrics.totalYearOutgoing.toFixed(2)}</span></div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', background: '#3b82f6', borderRadius: '2px' }}></div> Net <span style={{ fontWeight: 600, color: '#2563eb' }}>{currency}{metrics.currentCashPosition.toFixed(2)}</span></div>

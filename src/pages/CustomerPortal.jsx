@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight, LayoutDashboard, User } from 'lucide-react'
 import SEO from '../components/ui/SEO'
+import ExportToolbar from '../components/ui/ExportToolbar'
 import CustomerJobUploadModal from '../components/modals/CustomerJobUploadModal'
 import CustomerPaymentModal from '../components/modals/CustomerPaymentModal'
 import OnboardingTour from '../components/ui/OnboardingTour'
@@ -43,6 +44,27 @@ export default function CustomerPortal() {
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const jobsPerPage = 10
+  const reportRef = useRef(null)
+
+  const exportColumns = [
+    { header: 'Job Number', key: 'job_number' },
+    { header: 'Category', key: 'category' },
+    { header: 'Date', key: 'job_date' },
+    { header: 'Status', key: 'status' },
+    { header: 'Total Price', key: 'total_price' },
+    { header: 'Balance Owed', key: 'balance' }
+  ]
+
+  const exportTableData = useMemo(() => {
+    return jobs.map(j => ({
+      job_number: j.job_number || 'N/A',
+      category: j.category || 'General',
+      job_date: j.job_date,
+      status: j.status || 'Pending',
+      total_price: Number(j.total_price) || 0,
+      balance: Number(j.balance) || 0
+    }))
+  }, [jobs])
 
   useEffect(() => {
     loadData()
@@ -220,10 +242,22 @@ export default function CustomerPortal() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
             <h1 style={{ fontSize: '28px', margin: 0 }}>Welcome back, {customer.name.split(' ')[0]}!</h1>
             
-            <button className="btn btn-primary" onClick={() => setShowUploadModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Plus size={18} /> Upload New Job
-            </button>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <ExportToolbar 
+                tableData={exportTableData} 
+                columns={exportColumns} 
+                fileName={`Customer_Portal_Report_${customer.name.replace(/\s+/g, '_')}`}
+                title={`${customer.companies?.name || 'SoluoPrint'} - ${customer.name}'s Portal Summary`}
+                currency={currency}
+                reportRef={reportRef}
+              />
+              <button className="btn btn-primary" onClick={() => setShowUploadModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Plus size={18} /> Upload New Job
+              </button>
+            </div>
           </div>
+          
+          <div ref={reportRef} style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px' }}>
           
           {/* Stat Cards - matching admin dashboard spacing */}
           <div className="stat-grid" style={{ marginBottom: '32px' }}>
@@ -419,6 +453,7 @@ export default function CustomerPortal() {
               </div>
             )}
           </div>
+        </div>
         </>
       )
     }

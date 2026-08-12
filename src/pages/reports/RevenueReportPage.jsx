@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { TrendingUp, Calendar, Filter, FileText } from 'lucide-react'
+import { TrendingUp, Calendar, Filter, FileText, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
@@ -29,9 +29,12 @@ export default function RevenueReportPage() {
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   
-  // Date filtering state - default to current year
+  // Date filtering, search, and pagination state
   const [dateFrom, setDateFrom] = useState(`${new Date().getFullYear()}-01-01`)
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
   
   const reportRef = useRef(null)
   const currency = company?.currency_symbol || '¢'
@@ -46,13 +49,13 @@ export default function RevenueReportPage() {
       .from('payments')
       .select('*, customers(name), payment_accounts(name)')
       .eq('company_id', company.id)
-      .order('payment_date', { ascending: true })
+      .order('payment_date', { ascending: false })
 
     const { data: jobData } = await supabase
       .from('print_jobs')
       .select('*, customers(name)')
       .eq('company_id', company.id)
-      .order('job_date', { ascending: true })
+      .order('job_date', { ascending: false })
 
     setPayments(payData || [])
     setJobs(jobData || [])
@@ -68,6 +71,25 @@ export default function RevenueReportPage() {
       return true
     })
   }, [payments, dateFrom, dateTo])
+
+  // Search filtered records
+  const searchedPayments = useMemo(() => {
+    return filteredPayments.filter(p => {
+      const cust = (p.customers?.name || '').toLowerCase()
+      const method = (p.payment_method || '').toLowerCase()
+      const notes = (p.notes || '').toLowerCase()
+      const date = (p.payment_date || '').toLowerCase()
+      const query = searchTerm.toLowerCase()
+      return cust.includes(query) || method.includes(query) || notes.includes(query) || date.includes(query)
+    })
+  }, [filteredPayments, searchTerm])
+
+  const paginatedPayments = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return searchedPayments.slice(start, start + itemsPerPage)
+  }, [searchedPayments, currentPage])
+
+  const totalPages = Math.ceil(searchedPayments.length / itemsPerPage) || 1
 
   const filteredJobs = useMemo(() => {
     return jobs.filter(j => {
@@ -160,14 +182,14 @@ export default function RevenueReportPage() {
   ]
 
   const exportTableData = useMemo(() => {
-    return filteredPayments.map(p => ({
+    return searchedPayments.map(p => ({
       payment_date: p.payment_date,
       customer_name: p.customers?.name || 'N/A',
       amount: Number(p.amount) || 0,
       payment_method: p.payment_method || '-',
       notes: p.notes || '-'
     }))
-  }, [filteredPayments])
+  }, [searchedPayments])
 
   // Preset Date helper
   function setPreset(type) {
@@ -183,6 +205,7 @@ export default function RevenueReportPage() {
       setDateFrom('')
       setDateTo('')
     }
+    setCurrentPage(1)
   }
 
   return (
@@ -215,7 +238,7 @@ export default function RevenueReportPage() {
               className="form-control" 
               style={{ width: 'auto', fontSize: '13px' }} 
               value={dateFrom} 
-              onChange={e => setDateFrom(e.target.value)} 
+              onChange={e => { setDateFrom(e.target.value); setCurrentPage(1); }} 
             />
             <span style={{ color: 'var(--text-muted)' }}>to</span>
             <input 
@@ -223,7 +246,7 @@ export default function RevenueReportPage() {
               className="form-control" 
               style={{ width: 'auto', fontSize: '13px' }} 
               value={dateTo} 
-              onChange={e => setDateTo(e.target.value)} 
+              onChange={e => { setDateTo(e.target.value); setCurrentPage(1); }} 
             />
           </div>
 
@@ -334,8 +357,21 @@ export default function RevenueReportPage() {
         )}
 
         {/* Detailed Breakdown Table */}
-        <div className="card">
-          <div className="card-header"><div className="card-title">Payment Collections Record ({filteredPayments.length})</div></div>
+        <div className="card" style={{ padding: 0 }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div className="card-title">Payment Collections Record ({searchedPayments.length})</div>
+            <div style={{ position: 'relative', width: '280px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                className="form-control" 
+                placeholder="Search records..." 
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                style={{ paddingLeft: '36px', height: '36px', fontSize: '13px' }}
+              />
+            </div>
+          </div>
           <div className="table-container">
             <table>
               <thead>
@@ -350,10 +386,10 @@ export default function RevenueReportPage() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px' }}>Loading revenue data...</td></tr>
-                ) : filteredPayments.length === 0 ? (
-                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No payment records found for the selected date range.</td></tr>
+                ) : searchedPayments.length === 0 ? (
+                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No payment records found matching search query.</td></tr>
                 ) : (
-                  filteredPayments.map(p => (
+                  paginatedPayments.map(p => (
                     <tr key={p.id}>
                       <td style={{ fontWeight: 500 }}>{p.payment_date}</td>
                       <td style={{ fontWeight: 600 }}>{p.customers?.name || 'N/A'}</td>
@@ -366,6 +402,30 @@ export default function RevenueReportPage() {
               </tbody>
             </table>
           </div>
+
+          {searchedPayments.length > 0 && (
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, searchedPayments.length)} of {searchedPayments.length} records
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft size={16} /> Prev
+                </button>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

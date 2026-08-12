@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Receipt, Calendar, FileText } from 'lucide-react'
+import { Receipt, Calendar, FileText, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Bar, Doughnut } from 'react-chartjs-2'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
@@ -28,9 +28,12 @@ export default function ExpenseReportPage() {
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Date filtering state - default to current year
-  const [dateFrom, setDateFrom] = useState(`${new Date().getFullYear()}-01-01`)
-  const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0])
+  // Date filtering, search & pagination state
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   const reportRef = useRef(null)
   const currency = company?.currency_symbol || '¢'
@@ -41,11 +44,21 @@ export default function ExpenseReportPage() {
 
   async function loadData() {
     setLoading(true)
-    const { data } = await supabase
+    let { data, error } = await supabase
       .from('expenses')
-      .select('*, expense_accounts(name)')
+      .select('*, payment_accounts(name)')
       .eq('company_id', company.id)
-      .order('expense_date', { ascending: true })
+      .order('expense_date', { ascending: false })
+
+    if (error || !data || data.length === 0) {
+      const fallback = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('company_id', company.id)
+      if (fallback.data && fallback.data.length > 0) {
+        data = fallback.data
+      }
+    }
 
     setExpenses(data || [])
     setLoading(false)
@@ -54,12 +67,31 @@ export default function ExpenseReportPage() {
   // Filter data by selected date range
   const filteredExpenses = useMemo(() => {
     return expenses.filter(e => {
-      if (!e.expense_date) return false
-      if (dateFrom && e.expense_date < dateFrom) return false
-      if (dateTo && e.expense_date > dateTo) return false
+      const expDate = e.expense_date || (e.created_at ? e.created_at.slice(0, 10) : '')
+      if (dateFrom && expDate && expDate < dateFrom) return false
+      if (dateTo && expDate && expDate > dateTo) return false
       return true
     })
   }, [expenses, dateFrom, dateTo])
+
+  // Search filtered records
+  const searchedExpenses = useMemo(() => {
+    return filteredExpenses.filter(e => {
+      const desc = (e.title || e.description || '').toLowerCase()
+      const cat = (e.category || '').toLowerCase()
+      const acc = (e.expense_accounts?.name || '').toLowerCase()
+      const date = (e.expense_date || '').toLowerCase()
+      const query = searchTerm.toLowerCase()
+      return desc.includes(query) || cat.includes(query) || acc.includes(query) || date.includes(query)
+    })
+  }, [filteredExpenses, searchTerm])
+
+  const paginatedExpenses = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return searchedExpenses.slice(start, start + itemsPerPage)
+  }, [searchedExpenses, currentPage])
+
+  const totalPages = Math.ceil(searchedExpenses.length / itemsPerPage) || 1
 
   const totalExpenses = useMemo(() => {
     return filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
@@ -117,7 +149,7 @@ export default function ExpenseReportPage() {
   const accountChart = useMemo(() => {
     const map = {}
     filteredExpenses.forEach(e => {
-      const acc = e.expense_accounts?.name || 'Unassigned'
+      const acc = e.payment_accounts?.name || e.expense_accounts?.name || 'Unassigned'
       map[acc] = (map[acc] || 0) + (Number(e.amount) || 0)
     })
     const labels = Object.keys(map)
@@ -139,14 +171,14 @@ export default function ExpenseReportPage() {
   ]
 
   const exportTableData = useMemo(() => {
-    return filteredExpenses.map(e => ({
+    return searchedExpenses.map(e => ({
       expense_date: e.expense_date,
       title: e.title || e.description || '-',
       category: e.category || 'General',
-      account_name: e.expense_accounts?.name || '-',
+      account_name: e.payment_accounts?.name || e.expense_accounts?.name || '-',
       amount: Number(e.amount) || 0
     }))
-  }, [filteredExpenses])
+  }, [searchedExpenses])
 
   function setPreset(type) {
     const now = new Date()
@@ -161,6 +193,7 @@ export default function ExpenseReportPage() {
       setDateFrom('')
       setDateTo('')
     }
+    setCurrentPage(1)
   }
 
   return (
@@ -193,7 +226,7 @@ export default function ExpenseReportPage() {
               className="form-control" 
               style={{ width: 'auto', fontSize: '13px' }} 
               value={dateFrom} 
-              onChange={e => setDateFrom(e.target.value)} 
+              onChange={e => { setDateFrom(e.target.value); setCurrentPage(1); }} 
             />
             <span style={{ color: 'var(--text-muted)' }}>to</span>
             <input 
@@ -201,7 +234,7 @@ export default function ExpenseReportPage() {
               className="form-control" 
               style={{ width: 'auto', fontSize: '13px' }} 
               value={dateTo} 
-              onChange={e => setDateTo(e.target.value)} 
+              onChange={e => { setDateTo(e.target.value); setCurrentPage(1); }} 
             />
           </div>
 
@@ -303,8 +336,21 @@ export default function ExpenseReportPage() {
         )}
 
         {/* Detailed Breakdown Table */}
-        <div className="card">
-          <div className="card-header"><div className="card-title">Expense Records ({filteredExpenses.length})</div></div>
+        <div className="card" style={{ padding: 0 }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div className="card-title">Expense Records ({searchedExpenses.length})</div>
+            <div style={{ position: 'relative', width: '280px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                className="form-control" 
+                placeholder="Search expenses..." 
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                style={{ paddingLeft: '36px', height: '36px', fontSize: '13px' }}
+              />
+            </div>
+          </div>
           <div className="table-container">
             <table>
               <thead>
@@ -319,15 +365,15 @@ export default function ExpenseReportPage() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px' }}>Loading expense data...</td></tr>
-                ) : filteredExpenses.length === 0 ? (
-                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No expense records found for the selected date range.</td></tr>
+                ) : searchedExpenses.length === 0 ? (
+                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No expense records found matching search query.</td></tr>
                 ) : (
-                  filteredExpenses.map(e => (
+                  paginatedExpenses.map(e => (
                     <tr key={e.id}>
                       <td style={{ fontWeight: 500 }}>{e.expense_date}</td>
                       <td style={{ fontWeight: 600 }}>{e.title || e.description || '-'}</td>
-                      <td><span className="pill pill-blue">{e.category || 'General'}</span></td>
-                      <td>{e.expense_accounts?.name || '-'}</td>
+                      <td><span className="pill pill-orange">{e.category || 'General'}</span></td>
+                      <td>{e.payment_accounts?.name || e.expense_accounts?.name || '-'}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: '#ef4444' }}>{currency} {(Number(e.amount) || 0).toFixed(2)}</td>
                     </tr>
                   ))
@@ -335,6 +381,30 @@ export default function ExpenseReportPage() {
               </tbody>
             </table>
           </div>
+
+          {searchedExpenses.length > 0 && (
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, searchedExpenses.length)} of {searchedExpenses.length} records
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft size={16} /> Prev
+                </button>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

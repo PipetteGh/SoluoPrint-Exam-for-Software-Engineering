@@ -6,14 +6,21 @@ import Select from 'react-select'
 import NewCustomerModal from '../modals/NewCustomerModal'
 
 const SIZE_PRESETS = [
-  { label: 'Custom Size', w: '', h: '' },
-  { label: 'A4 (8.3 × 11.7)', w: 8.3, h: 11.7 },
-  { label: 'A3 (11.7 × 16.5)', w: 11.7, h: 16.5 },
-  { label: 'A2 (16.5 × 23.4)', w: 16.5, h: 23.4 },
-  { label: 'A1 (23.4 × 33.1)', w: 23.4, h: 33.1 },
-  { label: '2×3 ft Banner', w: 2, h: 3 },
-  { label: '3×5 ft Banner', w: 3, h: 5 },
-  { label: '4×6 ft Banner', w: 4, h: 6 },
+  { label: 'Custom Size', w: '', h: '', unit: 'ft' },
+  { label: 'A4 (8.3 × 11.7 in)', w: 8.3, h: 11.7, unit: 'inch' },
+  { label: 'A3 (11.7 × 16.5 in)', w: 11.7, h: 16.5, unit: 'inch' },
+  { label: 'A2 (16.5 × 23.4 in)', w: 16.5, h: 23.4, unit: 'inch' },
+  { label: 'A1 (23.4 × 33.1 in)', w: 23.4, h: 33.1, unit: 'inch' },
+  { label: 'A0 (33.1 × 46.8 in)', w: 33.1, h: 46.8, unit: 'inch' },
+  { label: 'Sticker 2 × 2 in', w: 2, h: 2, unit: 'inch' },
+  { label: 'Sticker 3 × 3 in', w: 3, h: 3, unit: 'inch' },
+  { label: 'Sticker 4 × 4 in', w: 4, h: 4, unit: 'inch' },
+  { label: 'Sticker A4 Sheet', w: 8.3, h: 11.7, unit: 'inch' },
+  { label: 'Sticker A3 Sheet', w: 11.7, h: 16.5, unit: 'inch' },
+  { label: 'Banner 2 × 3 ft', w: 2, h: 3, unit: 'ft' },
+  { label: 'Banner 3 × 5 ft', w: 3, h: 5, unit: 'ft' },
+  { label: 'Banner 4 × 6 ft', w: 4, h: 6, unit: 'ft' },
+  { label: 'Banner 6 × 10 ft', w: 6, h: 10, unit: 'ft' },
 ]
 
 export default function BulkJobForm({ company, onBack, onSuccess }) {
@@ -22,6 +29,7 @@ export default function BulkJobForm({ company, onBack, onSuccess }) {
   const [services, setServices] = useState([])
   const [profiles, setProfiles] = useState([])
   const [categories, setCategories] = useState([])
+  const [dbPresets, setDbPresets] = useState([])
   const [tracked, setTracked] = useState(true)
   const [loading, setLoading] = useState(false)
   const toast = useToast()
@@ -50,13 +58,17 @@ export default function BulkJobForm({ company, onBack, onSuccess }) {
     supabase.from('service_categories').select('id,name,form_type').eq('company_id', company.id).eq('is_active', true).order('name').then(({ data }) => {
       setCategories(data || [])
     })
+    supabase.from('preset_sizes').select('*').eq('company_id', company.id).order('sort_order', { ascending: true }).then(({ data }) => {
+      setDbPresets(data || [])
+    })
   }, [company])
 
   function getSqFtDivisor(unit) {
-    if (unit === 'ft') return 1
-    if (unit === 'inch') return 144
-    if (unit === 'cm') return 929.03
-    if (unit === 'm') return 0.0929
+    if (unit === 'ft' || unit === 'feet') return 1
+    if (unit === 'inch' || unit === 'inches' || unit === 'in') return 144
+    if (unit === 'cm') return 929.0304
+    if (unit === 'mm') return 92903.04
+    if (unit === 'm') return 0.09290304
     return 1
   }
 
@@ -85,6 +97,45 @@ export default function BulkJobForm({ company, onBack, onSuccess }) {
   function handleFormChange(e) {
     const { name, value } = e.target
     setForm(prev => ({ ...prev, [name]: value }))
+  }
+
+  const allPresets = [
+    ...dbPresets.map(p => ({
+      label: p.name || `${p.width}×${p.height} ${p.unit}`,
+      w: p.width,
+      h: p.height,
+      unit: p.unit || 'ft',
+      price: p.price || p.unit_price
+    })),
+    ...SIZE_PRESETS
+  ]
+
+  function handlePresetSelect(itemId, presetIndex) {
+    const preset = allPresets[presetIndex]
+    if (!preset) return
+    setItems(prev => prev.map(item => {
+      if (item.id === itemId) {
+        const updated = { ...item }
+        if (preset.w !== '' && preset.w !== undefined && preset.w !== null) {
+          updated.width = String(preset.w)
+        } else {
+          updated.width = ''
+        }
+        if (preset.h !== '' && preset.h !== undefined && preset.h !== null) {
+          updated.height = String(preset.h)
+        } else {
+          updated.height = ''
+        }
+        if (preset.unit) {
+          updated.unit = preset.unit
+        }
+        if (preset.price || preset.unit_price) {
+          updated.unit_price = String(preset.price || preset.unit_price)
+        }
+        return updated
+      }
+      return item
+    }))
   }
 
   function handleItemChange(id, field, value) {
@@ -306,16 +357,10 @@ export default function BulkJobForm({ company, onBack, onSuccess }) {
                   <div style={{ display: 'grid', gridTemplateColumns: isLargeFormat ? 'auto auto auto auto 1fr' : '100px 1fr', gap: '10px', alignItems: 'end' }}>
                     {isLargeFormat && (
                       <>
-                        <div className="form-group" style={{ marginBottom: 0, width: '100px' }}>
+                        <div className="form-group" style={{ marginBottom: 0, minWidth: '120px' }}>
                           <label className="form-label" style={{ fontSize: '11px' }}>Size Preset</label>
-                          <select className="form-control" onChange={(e) => {
-                            const preset = SIZE_PRESETS[parseInt(e.target.value)]
-                            if (preset.w) {
-                              handleItemChange(item.id, 'width', String(preset.w))
-                              handleItemChange(item.id, 'height', String(preset.h))
-                            }
-                          }} style={{ fontSize: '12px' }}>
-                            {SIZE_PRESETS.map((p, i) => <option key={i} value={i}>{p.label}</option>)}
+                          <select className="form-control" onChange={(e) => handlePresetSelect(item.id, parseInt(e.target.value))} style={{ fontSize: '12px' }}>
+                            {allPresets.map((p, i) => <option key={i} value={i}>{p.label}</option>)}
                           </select>
                         </div>
                         <div className="form-group" style={{ marginBottom: 0, width: '70px' }}>
@@ -329,7 +374,7 @@ export default function BulkJobForm({ company, onBack, onSuccess }) {
                         <div className="form-group" style={{ marginBottom: 0, width: '80px' }}>
                           <label className="form-label" style={{ fontSize: '11px' }}>Unit</label>
                           <select className="form-control" style={{ fontSize: '12px' }} value={item.unit} onChange={e => handleItemChange(item.id, 'unit', e.target.value)}>
-                            {['ft', 'inch', 'm', 'cm'].map(u => <option key={u}>{u}</option>)}
+                            {['ft', 'inch', 'cm', 'mm', 'm'].map(u => <option key={u} value={u}>{u}</option>)}
                           </select>
                         </div>
                       </>
