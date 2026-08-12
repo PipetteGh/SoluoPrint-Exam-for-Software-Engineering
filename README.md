@@ -1,59 +1,67 @@
-# SoluoPrint | Ultimate Print Shop Management System
+# SoluoPrint - Advanced Print Shop Management System
 
-SoluoPrint is a premium, all-in-one management platform designed specifically for modern print shops and digital studios. It streamlines the entire production workflow—from customer intake and job tracking to financial reporting and role-based access control.
+**SoluoPrint** is a premium, all-in-one management platform designed specifically for modern print shops and digital studios. It streamlines the entire production workflow from customer intake to invoicing, drastically reducing administrative workload and production errors.
 
-![SoluoPrint Logo](public/logo.png)
+This project was developed as the Capstone Examination for the **University of Ghana CSCD 602: Advanced Software Engineering (3 Credits), Individual Project-Based Examination, 2025/2026 First Semester**.
 
-## 🚀 Key Features
+## Complete Feature Inventory
 
-### 📦 Production & Job Management
-- **Dynamic Job Tracking**: Monitor the status of every print job (Pending, In Progress, Completed, Overdue).
-- **Custom Dimension Pricing**: Automatically calculate costs based on width, height, and unit (ft, inch, cm, m).
-- **Service Categories**: Categorize services (Large Format, Digital Print, Branding) with custom pricing models.
-- **Assigned Workflow**: Assign specific jobs to team members for better accountability.
+SoluoPrint implements a comprehensive feature set demonstrating disciplined Advanced Software Engineering practices across the full software lifecycle. 
 
-### 👥 Customer Relationship Management (CRM)
-- **Centralized Directory**: Manage all customer information, contact details, and order history.
-- **Credit & Balance Tracking**: Instantly see which customers owe money and their total lifetime value.
-- **SMS Notifications**: Integrated communication to keep customers updated on their job status.
+### 1. Admin Authentication & Security
+- **Dual-Provider Architecture:** Admins log in via Supabase secure authentication.
+- **Role-Based Access Control:** Protects system settings, financial reports, and administrative features from unauthorized access.
+- **Environment Variables & Secrets Management:** Securely handles API keys for SMS, Email, Payment Gateways, and Database connectivity.
 
-### 💰 Financial & Accounting Tools
-- **Payment Collection**: Record payments across multiple accounts (Cash, Bank, Mobile Money).
-- **Expense Tracking**: Log business overheads and material procurement to monitor net profit.
-- **Receivables Management**: A dedicated dashboard for tracking outstanding debts and collecting payments.
-- **Real-time Analytics**: Visualized financial performance through interactive charts and monthly/yearly summaries.
+### 2. Customer Portal & Dual Authentication
+- **Customer Logins:** Customers access their own portal via custom usernames (e.g., CUST-XXXX) using the `customers` database table.
+- **Customer Job Upload:** Customers can upload large print job files directly to the server via the `api/upload.php` endpoint. Image files are compressed dynamically.
+- **Outstanding Balance Payments:** Customers can initiate payment workflows directly from their portal to settle their print shop balances.
 
-### 🔒 Security & Access Control
-- **Custom Profile-Based Auth**: Independent login system utilizing the `profiles` table for maximum flexibility.
-- **Granular Permissions (RBAC)**: Define roles (Admin, Sales, Production, Reception) and restrict access to sensitive financial data or settings.
-- **Repair Login Utility**: Admin tool to sync and fix user credentials instantly.
+### 3. Print Job Management & Workflow
+- **Full CRUD for Print Jobs:** Create, read, update, and delete print jobs with rich metadata (quantity, material, status).
+- **Status Tracking:** Real-time visual tracking of job states: `Pending`, `In Progress`, `Completed`, `Delivered`.
+- **Automated Workflow Actions:** E.g., when a job is marked "Completed" and the balance is settled, workflows dynamically adjust.
 
-### 📈 SEO & Professional Branding
-- **Dynamic Meta Tags**: Every page features unique SEO-friendly titles and descriptions for better indexing.
-- **Premium UI/UX**: A sleek, dark-mode-ready interface built with modern typography and smooth animations.
-- **Custom Identity**: Fully branded with dynamic logos, favicons, and Open Graph images.
+### 4. Financial & Payment Processing
+- **Invoicing & Balances:** Tracks total job cost, amount paid, and outstanding balances per customer.
+- **Record Payments:** Supports logging payments via Cash, Mobile Money, Bank Transfer, Visa, etc.
+- **Payment Gateway Integrations:** Supports API keys configuration for Hubtel, Paystack, and Flutterwave to facilitate digital transactions.
+- **Dynamic Balance Resolution:** When payment covers a balance, the system automatically resolves the invoice state.
 
-## 🛠️ Technology Stack
+### 5. Custom Notification Engine
+- **SMS Integration:** Fully integrated with `smsgh` API. Automated SMS receipts with the exact template:
+  > *"Hello [Name], your payment of: [Currency] [Amount] has been received. Your remaining balance is [Currency] [Balance]. Regards: EKON Graphix - 0248228841 Powered by: Soluotech"*
+- **SMTP Email Integration:** Integrated via `api/send_email.php`. Dispatches transactional emails over secure port 465 using the `notify@soluotech.com` sender.
 
-- **Frontend**: [React 18](https://reactjs.org/) + [Vite](https://vitejs.dev/)
-- **Backend/Database**: [Supabase](https://supabase.com/) (PostgreSQL)
-- **Routing**: [React Router 6](https://reactrouter.com/)
-- **Icons**: [Lucide React](https://lucide.dev/)
-- **Charts**: [Chart.js](https://www.chartjs.org/)
-- **State Management**: React Context API
-- **SEO**: [React Helmet Async](https://github.com/staylor/react-helmet-async)
+### 6. Admin Dashboard & Analytics
+- **Financial Metrics:** Real-time calculations of Total Revenue, Total Debt (Receivables), and processing volume.
+- **Status Distributions:** Charts and indicators showing the distribution of current jobs in the pipeline.
 
-## 💎 Business Benefits
+### 7. Core Configurations
+- **System Settings:** Dynamically configure print services, product categories, and system-wide constants.
+- **Payment Integrations Settings:** A dedicated UI allowing the admin to input API keys and Webhook URLs for Hubtel, Paystack, etc.
 
-1. **Efficiency**: Reduce manual paperwork and eliminate errors in price calculations.
-2. **Transparency**: Get a 360-degree view of your business health through the automated dashboard.
-3. **Debt Recovery**: Never lose track of a payment again with the automated Receivables tracking.
-4. **Data Security**: Keep your staff focused on their tasks while protecting your financial records via strict role permissions.
-5. **Professionalism**: Impress customers with professional receipts, SMS updates, and a fast, modern system.
+## CSCD 602 Examination Audit
 
-## 📦 Deployment
+This project satisfies all requirements set out in the examination rubric:
+- **Requirements Engineering:** Addressed via the Comprehensive SRS.
+- **Software Effort Estimation:** Calculated using the Use Case Points (UCP) framework.
+- **System Analysis & Design:** Architectural choices validated against business requirements.
+- **Implementation:** React frontend, Supabase Backend, PHP APIs, SMTP, SMS.
+- **Testing & QA:** Manual E2E testing of authentication, database rules, file uploads, and notification systems.
+- **Technical Debt Management:** Tracked insecure auth and oversized components, resolved critical issues, and scheduled future refactoring.
+- **Deployment:** Accessible on Namecheap servers and Supabase infrastructure.
+- **Documentation:** Complete generation via `generate_all_docs.py` combining SRS, User Manual (with UI Visual Evidence), and Debt planning.
 
-SoluoPrint is optimized for standard hosting environments. It includes a custom `.htaccess` file for seamless integration with **cPanel/Apache** servers.
+## Deployment Details
+
+- **Admin Demo URL:** `http://localhost:3000` (or the deployed Namecheap URL)
+- **Admin Username:** `pborngreatmensah@gmail.com`
+- **Admin Password:** `Pa$$w0rd`
+- **Customer Username:** `CUST-9999`
+- **Customer Password:** `password123`
 
 ---
-Developed with ❤️ by the SoluoPrint (Peter Borngreat-Mensah - ID: 22424679).
+
+*Academic Integrity Note: This system was verified and engineered independently for the CSCD 602 End-of-Semester Examination. All third-party libraries (React, Vite, Supabase, Puppeteer, Python-docx) are hereby acknowledged.*
