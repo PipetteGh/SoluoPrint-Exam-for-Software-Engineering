@@ -175,9 +175,23 @@ export default function CustomersPage() {
     
     for (const cust of selectedCustomers) {
       if (!cust.username) {
-        const cleanName = cust.name.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase()
-        const randomNum = Math.floor(1000 + Math.random() * 9000)
-        const newUsername = `CUST-${cleanName || 'USER'}-${randomNum}`
+        let isUnique = false;
+        let newUsername = '';
+        const cleanName = cust.name.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
+        
+        while (!isUnique) {
+          const randomNum = Math.floor(1000 + Math.random() * 9000);
+          newUsername = `CUST-${cleanName || 'USER'}-${randomNum}`;
+          
+          const { data } = await supabase
+            .from('customers')
+            .select('id')
+            .eq('username', newUsername)
+            .maybeSingle();
+            
+          if (!data) isUnique = true;
+        }
+
         const newPassword = Math.random().toString(36).slice(-8)
         
         const { error } = await supabase
@@ -422,9 +436,23 @@ export default function CustomersPage() {
                     <button 
                       className="btn btn-primary"
                       onClick={async () => {
-                        const cleanName = viewCredentials.name.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase()
-                        const randomNum = Math.floor(1000 + Math.random() * 9000)
-                        const newUsername = `CUST-${cleanName || 'USER'}-${randomNum}`
+                        let isUnique = false;
+                        let newUsername = '';
+                        const cleanName = viewCredentials.name.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
+                        
+                        while (!isUnique) {
+                          const randomNum = Math.floor(1000 + Math.random() * 9000);
+                          newUsername = `CUST-${cleanName || 'USER'}-${randomNum}`;
+                          
+                          const { data } = await supabase
+                            .from('customers')
+                            .select('id')
+                            .eq('username', newUsername)
+                            .maybeSingle();
+                            
+                          if (!data) isUnique = true;
+                        }
+
                         const newPassword = Math.random().toString(36).slice(-8)
                         
                         const { error } = await supabase

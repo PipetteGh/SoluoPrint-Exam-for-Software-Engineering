@@ -23,10 +23,26 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
     setForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  const generateUsername = (name) => {
+  const generateUniqueUsername = async (name) => {
     const cleanName = name.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    return `CUST-${cleanName || 'USER'}-${randomNum}`;
+    let isUnique = false;
+    let username = '';
+    
+    while (!isUnique) {
+      const randomNum = Math.floor(1000 + Math.random() * 9000);
+      username = `CUST-${cleanName || 'USER'}-${randomNum}`;
+      
+      const { data } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('username', username)
+        .maybeSingle();
+        
+      if (!data) {
+        isUnique = true;
+      }
+    }
+    return username;
   }
 
   const generatePassword = () => {
@@ -40,8 +56,8 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
     const payload = { ...form, company_id: company.id }
     if (!payload.customer_type_id) payload.customer_type_id = null
     
-    // Auto-generate portal credentials
-    const username = generateUsername(form.name)
+    // Auto-generate portal credentials and ensure it is unique globally
+    const username = await generateUniqueUsername(form.name)
     const password = generatePassword()
     payload.username = username
     payload.password = password

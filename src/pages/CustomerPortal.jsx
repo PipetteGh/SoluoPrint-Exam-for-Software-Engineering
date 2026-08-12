@@ -1,11 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt } from 'lucide-react'
+import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import SEO from '../components/ui/SEO'
 import CustomerJobUploadModal from '../components/modals/CustomerJobUploadModal'
 import CustomerPaymentModal from '../components/modals/CustomerPaymentModal'
 import OnboardingTour from '../components/ui/OnboardingTour'
+import {
+  Chart as ChartJS, CategoryScale, LinearScale, BarElement,
+  PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler
+} from 'chart.js'
+import { Bar, Doughnut, Line } from 'react-chartjs-2'
+
+ChartJS.register(ArcElement, Filler, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend)
 
 export default function CustomerPortal() {
   const [customer, setCustomer] = useState(null)
@@ -19,6 +26,11 @@ export default function CustomerPortal() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [gatewaysActive, setGatewaysActive] = useState(false)
   const [selectedJobToPay, setSelectedJobToPay] = useState(null)
+  
+  // Pagination & Search state
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const jobsPerPage = 10
 
   useEffect(() => {
     loadData()
@@ -63,13 +75,14 @@ export default function CustomerPortal() {
     
     setJobs(jobData || [])
 
-    // Fetch payments count
-    const { count: paymentsCount } = await supabase
+    // Fetch payments and calculate total amount
+    const { data: paymentsData } = await supabase
       .from('payments')
-      .select('*', { count: 'exact', head: true })
+      .select('amount')
       .eq('customer_id', custId)
 
-    setTotalPayments(paymentsCount || 0)
+    const totalPaid = (paymentsData || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    setTotalPayments(totalPaid)
 
     setLoading(false)
   }
@@ -84,6 +97,45 @@ export default function CustomerPortal() {
   const activeJobs = jobs.filter(j => j.status !== 'Completed' && j.status !== 'Delivered' && j.status !== 'completed' && j.status !== 'delivered')
   const completedJobs = jobs.filter(j => j.status === 'Completed' || j.status === 'Delivered' || j.status === 'completed' || j.status === 'delivered')
   const currency = customer?.companies?.currency_symbol || '¢'
+
+  // Search and Pagination logic
+  const filteredJobs = useMemo(() => {
+    return jobs.filter(j => 
+      (j.job_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (j.category || '').toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  }, [jobs, searchTerm])
+
+  const paginatedJobs = useMemo(() => {
+    const start = (currentPage - 1) * jobsPerPage
+    return filteredJobs.slice(start, start + jobsPerPage)
+  }, [filteredJobs, currentPage])
+
+  const totalPages = Math.ceil(filteredJobs.length / jobsPerPage) || 1
+
+  // Chart data
+  const monthlySpendingChart = useMemo(() => {
+    const data = Array(12).fill(0)
+    jobs.forEach(j => {
+      if (j.job_date) {
+        const d = new Date(j.job_date)
+        if (d.getFullYear() === new Date().getFullYear()) {
+          data[d.getMonth()] += Number(j.total_price) || 0
+        }
+      }
+    })
+    return {
+      labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      datasets: [
+        {
+          label: 'Total Ordered',
+          data,
+          backgroundColor: '#3b82f6',
+          borderRadius: 4
+        }
+      ]
+    }
+  }, [jobs])
 
   // Render different tabs
   const renderContent = () => {
@@ -146,8 +198,26 @@ export default function CustomerPortal() {
               </div>
               <div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '4px' }}>Total Payments</div>
-                <div style={{ fontSize: '24px', fontWeight: 700 }}>{totalPayments}</div>
+                <div style={{ fontSize: '24px', fontWeight: 700 }}>{currency} {Number(totalPayments).toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
               </div>
+            </div>
+          </div>
+
+          <div className="card" style={{ padding: '20px 24px', marginBottom: '40px' }}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: 600 }}>Your Monthly Spending ({new Date().getFullYear()})</h3>
+            <div style={{ height: '300px', width: '100%' }}>
+              <Bar 
+                data={monthlySpendingChart} 
+                options={{ 
+                  responsive: true, 
+                  maintainAspectRatio: false, 
+                  plugins: { legend: { display: false } }, 
+                  scales: { 
+                    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }, 
+                    x: { grid: { display: false } } 
+                  } 
+                }} 
+              />
             </div>
           </div>
 
@@ -221,10 +291,23 @@ export default function CustomerPortal() {
             </button>
           </div>
           <div className="card" style={{ padding: 0 }}>
-            {jobs.length === 0 ? (
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ position: 'relative', width: '300px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  placeholder="Search jobs..." 
+                  value={searchTerm}
+                  onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                  style={{ paddingLeft: '36px' }}
+                />
+              </div>
+            </div>
+            {filteredJobs.length === 0 ? (
               <div style={{ padding: '60px 40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <FileText size={48} style={{ opacity: 0.2, margin: '0 auto 16px' }} />
-                <p>You have no print jobs yet.</p>
+                <p>No jobs found.</p>
               </div>
             ) : (
               <div className="table-responsive">
@@ -242,7 +325,7 @@ export default function CustomerPortal() {
                     </tr>
                   </thead>
                   <tbody>
-                    {jobs.map(job => (
+                    {paginatedJobs.map(job => (
                       <tr key={job.id}>
                         <td style={{ fontWeight: 500 }}>
                           {job.job_number || 'N/A'}
@@ -271,6 +354,30 @@ export default function CustomerPortal() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {filteredJobs.length > 0 && (
+              <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                  Showing {((currentPage - 1) * jobsPerPage) + 1} to {Math.min(currentPage * jobsPerPage, filteredJobs.length)} of {filteredJobs.length} jobs
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button 
+                    className="btn btn-secondary btn-sm" 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft size={16} /> Prev
+                  </button>
+                  <button 
+                    className="btn btn-secondary btn-sm" 
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
             )}
           </div>

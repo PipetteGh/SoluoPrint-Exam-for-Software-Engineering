@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
@@ -6,56 +6,13 @@ import SEO from '../components/ui/SEO'
 import { supabase } from '../lib/supabase'
 
 export default function LoginPage() {
-  const [step, setStep] = useState(0) // 0: Credentials, 1: OTP
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [otp, setOtp] = useState('')
-  const [generatedOtp, setGeneratedOtp] = useState('')
-  const [otpGeneratedAt, setOtpGeneratedAt] = useState(0)
-  const [resendTimer, setResendTimer] = useState(0)
-  const [profileData, setProfileData] = useState(null)
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const { customSignIn, finalizeCustomSignIn } = useAuth()
   const navigate = useNavigate()
-
-  useEffect(() => {
-    let interval = null
-    if (resendTimer > 0) {
-      interval = setInterval(() => setResendTimer(t => t - 1), 1000)
-    }
-    return () => clearInterval(interval)
-  }, [resendTimer])
-
-  async function sendOtpCode(isResend = false, profile = profileData) {
-    setLoading(true)
-    setError('')
-    try {
-      const code = Math.floor(100000 + Math.random() * 900000).toString()
-      setGeneratedOtp(code)
-      setOtpGeneratedAt(Date.now())
-      setResendTimer(60)
-      if (!isResend) setProfileData(profile)
-
-      const { sendEmail } = await import('../lib/email')
-      await sendEmail(
-        profile.email, 
-        'SoluoPrint Login Verification', 
-        `<p>Your login verification code is: <strong style="font-size:24px;">${code}</strong></p><p>If you did not request this, please secure your account immediately. This code expires in 20 minutes.</p>`, 
-        'SoluoPrint Security'
-      )
-      
-      // Removed SMS to prioritize email as requested by user
-      
-      if (!isResend) setStep(1)
-    } catch (e) {
-      console.error(e)
-      setError('Failed to send verification code. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   async function handleCredentialsSubmit(e) {
     e.preventDefault()
@@ -96,33 +53,14 @@ export default function LoginPage() {
         return
       }
 
+      await finalizeCustomSignIn(profile.id)
       setLoading(false)
-      await sendOtpCode(false, profile)
+      navigate('/dashboard')
     } catch (e) {
       console.error(e)
       setError(e.message || 'An unexpected error occurred during authentication. Please try again.')
       setLoading(false)
     }
-  }
-
-  async function handleOtpSubmit(e) {
-    e.preventDefault()
-    setError('')
-    
-    if (Date.now() - otpGeneratedAt > 20 * 60 * 1000) {
-      setError('OTP has expired. Please request a new one.')
-      return
-    }
-
-    if (otp !== generatedOtp) {
-      setError('Invalid OTP code. Please check your email.')
-      return
-    }
-
-    setLoading(true)
-    await finalizeCustomSignIn(profileData.id)
-    setLoading(false)
-    navigate('/dashboard')
   }
 
   return (
@@ -134,106 +72,60 @@ export default function LoginPage() {
           <span className="auth-logo-text">SoluoPrint</span>
         </div>
 
-        {step === 1 ? (
-          <>
-            <h1 className="auth-title">Two-Factor Authentication</h1>
-            <p className="auth-subtitle">We've sent a 6-digit code to {profileData?.email}</p>
-            
-            {error && <div className="error-alert">{error}</div>}
+        <h1 className="auth-title">Welcome back</h1>
+        <p className="auth-subtitle">Sign in to your account</p>
 
-            <form onSubmit={handleOtpSubmit}>
-              <div className="form-group">
-                <label className="form-label">Enter Verification Code</label>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  placeholder="123456" 
-                  value={otp} 
-                  onChange={e => setOtp(e.target.value)} 
-                  maxLength={6}
-                  required 
-                  style={{ textAlign: 'center', letterSpacing: '4px', fontSize: '24px' }}
-                  autoFocus
-                />
-              </div>
-              <button type="submit" className="btn btn-primary" disabled={loading} style={{width:'100%',justifyContent:'center',padding:'10px',fontSize:'15px'}}>
-                {loading ? 'Verifying...' : 'Verify & Login'}
-              </button>
-              
-              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                <button 
-                  type="button" 
-                  onClick={() => sendOtpCode(true)} 
-                  disabled={resendTimer > 0 || loading}
-                  className="btn btn-outline" 
-                  style={{flex: 1, justifyContent:'center',padding:'10px',fontSize:'15px'}}
-                >
-                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
-                </button>
-                <button type="button" onClick={() => setStep(0)} className="btn btn-outline" style={{flex: 1, justifyContent:'center',padding:'10px',fontSize:'15px'}}>
-                  Back
-                </button>
-              </div>
-            </form>
-          </>
-        ) : (
-          <>
-            <h1 className="auth-title">Welcome back</h1>
-            <p className="auth-subtitle">Sign in to your account</p>
+        {error && <div className="error-alert">{error}</div>}
 
-            {error && <div className="error-alert">{error}</div>}
+        <form onSubmit={handleCredentialsSubmit}>
+          <div className="form-group">
+            <label className="form-label">Email address or Username</label>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="you@company.com or CUST-XXXX"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
 
-            <form onSubmit={handleCredentialsSubmit}>
-              <div className="form-group">
-                <label className="form-label">Email address or Username</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="you@company.com or CUST-XXXX"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  autoFocus
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Password</label>
-                <div style={{position:'relative'}}>
-                  <input
-                    type={showPw ? 'text' : 'password'}
-                    className="form-control"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    required
-                    style={{paddingRight:'44px'}}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPw(v => !v)}
-                    style={{position:'absolute',right:'12px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',display:'flex'}}
-                  >
-                    {showPw ? <EyeOff size={16}/> : <Eye size={16}/>}
-                  </button>
-                </div>
-              </div>
-
+          <div className="form-group">
+            <label className="form-label">Password</label>
+            <div style={{position:'relative'}}>
+              <input
+                type={showPw ? 'text' : 'password'}
+                className="form-control"
+                placeholder="••••••••"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                style={{paddingRight:'44px'}}
+              />
               <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={loading}
-                style={{width:'100%',justifyContent:'center',padding:'10px',fontSize:'15px',marginTop:'4px'}}
+                type="button"
+                onClick={() => setShowPw(v => !v)}
+                style={{position:'absolute',right:'12px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',display:'flex'}}
               >
-                {loading ? 'Authenticating...' : 'Sign In'}
+                {showPw ? <EyeOff size={16}/> : <Eye size={16}/>}
               </button>
-            </form>
-
-            <div className="auth-footer">
-              Don't have an account? <Link to="/register">Create one free</Link>
             </div>
-          </>
-        )}
+          </div>
+
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={loading}
+            style={{width:'100%',justifyContent:'center',padding:'10px',fontSize:'15px',marginTop:'4px'}}
+          >
+            {loading ? 'Authenticating...' : 'Sign In'}
+          </button>
+        </form>
+
+        <div className="auth-footer">
+          Don't have an account? <Link to="/register">Create one free</Link>
+        </div>
       </div>
     </div>
   )
