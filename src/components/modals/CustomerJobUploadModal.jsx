@@ -30,6 +30,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
   // Load service categories from the company's configuration
   useEffect(() => {
     async function loadCategories() {
+      if (!customer?.company_id) return
       const { data } = await supabase
         .from('service_categories')
         .select('name')
@@ -42,11 +43,25 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
       }
     }
     loadCategories()
-  }, [customer.company_id])
+  }, [customer?.company_id])
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFiles(prev => [...prev, ...Array.from(e.target.files)])
+      const selected = Array.from(e.target.files)
+      setFiles(prev => {
+        const combined = [...prev, ...selected]
+        const unique = []
+        const keys = new Set()
+        for (const f of combined) {
+          const key = `${f.name}_${f.size}`
+          if (!keys.has(key)) {
+            keys.add(key)
+            unique.push(f)
+          }
+        }
+        return unique
+      })
+      e.target.value = ''
     }
   }
 
@@ -235,60 +250,6 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
         savedJob = newJob
       }
 
-      setUploadProgress(90)
-      setUploadStep('Notifying shop administration...')
-
-      // Recalculate customer balance
-      await recalculateCustomerBalance(customer.id)
-
-      // Log Audit Activity
-      logAudit({
-        companyId: customer.company_id,
-        userId: customer.id,
-        actorName: customer.name || 'Customer',
-        actorRole: 'Customer',
-        action: 'CUSTOMER_JOB_UPLOAD',
-        details: `Uploaded new staged job (${form.category}) with ${files.length} file(s). Notes: "${form.notes || 'None'}"`
-      })
-
-      // Add a notification for the admins
-      await supabase.from('notifications').insert({
-        company_id: customer.company_id,
-        title: 'New Customer Job Upload',
-        message: `${customer.name} uploaded a new ${form.category} job to Job List with ${files.length} file(s). ${form.notes ? `Notes: "${form.notes}"` : ''}`,
-        type: 'job_created',
-        read: false
-      })
-
-      // Send SMS & Email Alerts to shop admin
-      try {
-        const [{ data: companyData }, { data: smsSettings }] = await Promise.all([
-          supabase.from('companies').select('name, email, phone').eq('id', customer.company_id).single(),
-          supabase.from('sms_settings').select('*').eq('company_id', customer.company_id).maybeSingle()
-        ])
-
-        if (companyData) {
-          if (companyData.phone && smsSettings) {
-            const alertText = `Alert: ${customer.name} has uploaded a new ${form.category} job to your Job List with ${files.length} artwork file(s).`
-            sendSms(companyData.phone, alertText, smsSettings).catch(console.error)
-          }
-
-          if (companyData.email) {
-            const emailSubject = `[SoluoPrint] New Job List Upload from ${customer.name}`
-            const emailHtml = `
-              <h2>New Artwork Upload Received</h2>
-              <p><strong>Customer:</strong> ${customer.name}</p>
-              <p><strong>Category:</strong> ${form.category}</p>
-              <p><strong>Files Uploaded:</strong> ${files.length} artwork file(s)</p>
-              <p>Please log in to your SoluoPrint dashboard at <a href="${window.location.origin}">${window.location.origin}</a> to review and convert to print job.</p>
-            `
-            sendEmail(companyData.email, emailSubject, emailHtml, companyData.name || 'SoluoPrint Alerts').catch(console.error)
-          }
-        }
-      } catch (e) {
-        console.error('Admin notification dispatch error:', e)
-      }
-
       setUploadProgress(100)
       setUploadStep(jobToEdit ? 'Update Complete!' : 'Upload Complete!')
       showToast(jobToEdit ? 'Uploaded job updated successfully!' : 'Job uploaded to shop Job List successfully! The shop will review and convert it shortly.', 'success')
@@ -305,8 +266,58 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
       setFiles([])
       setExistingImages([])
 
+      // Instantly trigger modal callbacks so the modal disappears without waiting for side effects
       if (onSuccess) onSuccess(savedJob)
       if (onClose) onClose()
+
+      // Side Effects (Audit, Notifications, SMS, Email) in safe non-blocking background task
+      (async () => {
+        try {
+          await recalculateCustomerBalance(customer.id).catch(() => {})
+
+          logAudit({
+            companyId: customer.company_id,
+            userId: customer.id,
+            actorName: customer.name || 'Customer',
+            actorRole: 'Customer',
+            action: 'CUSTOMER_JOB_UPLOAD',
+            details: `Uploaded new staged job (${form.category}) with ${files.length} file(s). Notes: "${form.notes || 'None'}"`
+          })
+
+          await supabase.from('notifications').insert({
+            company_id: customer.company_id,
+            title: 'New Customer Job Upload',
+            message: `${customer.name} uploaded a new ${form.category} job to Job List with ${files.length} file(s). ${form.notes ? `Notes: "${form.notes}"` : ''}`,
+            type: 'job_created',
+            read: false
+          }).catch(e => console.warn('Notification insert warn:', e))
+
+          const [{ data: companyData }, { data: smsSettings }] = await Promise.all([
+            supabase.from('companies').select('name, email, phone').eq('id', customer.company_id).single(),
+            supabase.from('sms_settings').select('*').eq('company_id', customer.company_id).maybeSingle()
+          ])
+
+          if (companyData) {
+            if (companyData.phone && smsSettings) {
+              const alertText = `Alert: ${customer.name} has uploaded a new ${form.category} job to your Job List with ${files.length} artwork file(s).`
+              sendSms(companyData.phone, alertText, smsSettings).catch(console.error)
+            }
+
+            if (companyData.email) {
+              const emailSubject = `[SoluoPrint] New Job List Upload from ${customer.name}`
+              const emailHtml = `
+                <h2>New Artwork Upload Received</h2>
+                <p><strong>Customer:</strong> ${customer.name}</p>
+                <p><strong>Category:</strong> ${form.category}</p>
+                <p><strong>Files Uploaded:</strong> ${files.length} artwork file(s)</p>
+              `
+              sendEmail(companyData.email, emailSubject, emailHtml, companyData.name || 'SoluoPrint Alerts').catch(console.error)
+            }
+          }
+        } catch (e) {
+          console.warn('Background notification alert warn:', e)
+        }
+      })()
     } catch (err) {
       console.error('Job submit error:', err)
       showToast(err.message || 'Failed to submit job.', 'error')

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { recalculateCustomerBalance } from '../lib/balanceUtils'
 import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight, LayoutDashboard, User, HelpCircle, ClipboardList, Edit, Trash2 } from 'lucide-react'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { useToast } from '../contexts/ToastContext'
@@ -68,6 +69,7 @@ export default function CustomerPortal() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [gatewaysActive, setGatewaysActive] = useState(false)
+  const [selectedJobToPay, setSelectedJobToPay] = useState(null)
   const [selectedJobForReceipt, setSelectedJobForReceipt] = useState(null)
   const [editingStagedJob, setEditingStagedJob] = useState(null)
   const [runTour, setRunTour] = useState(false)
@@ -147,16 +149,27 @@ export default function CustomerPortal() {
 
       const { data: cust, error: custErr } = await supabase
         .from('customers')
-        .select('*, companies(name, currency_symbol)')
+        .select('*')
         .eq('id', custId)
         .single()
         
       if (custErr || !cust) {
+        console.warn('Customer fetch failed:', custErr?.message)
         localStorage.removeItem('soluoprint_customer_id')
         setLoading(false)
         navigate('/customer-login')
         return
       }
+
+      if (cust.company_id) {
+        const { data: comp } = await supabase
+          .from('companies')
+          .select('name, currency_symbol')
+          .eq('id', cust.company_id)
+          .maybeSingle()
+        if (comp) cust.companies = comp
+      }
+
       setCustomer(cust)
 
       // Check payment gateways
@@ -230,15 +243,15 @@ export default function CustomerPortal() {
       showToast('Uploaded job deleted successfully.', 'success')
 
       logAudit({
-        companyId: customer.company_id,
-        userId: customer.id,
-        actorName: customer.name || 'Customer',
+        companyId: customer?.company_id,
+        userId: customer?.id,
+        actorName: customer?.name || 'Customer',
         actorRole: 'Customer',
         action: 'DELETE_JOB_UPLOAD',
         details: `Deleted staged job upload (${item.description})`
       })
 
-      await fetchCustomerData(customer.id)
+      await loadData()
     } catch (err) {
       console.error('Delete job upload error:', err)
       showToast(err.message || 'Failed to delete uploaded job.', 'error')
@@ -350,7 +363,7 @@ export default function CustomerPortal() {
   }, [jobs])
 
   // ---- NOW the loading guard ----
-  if (loading) return <Preloader fullScreen />
+  if (loading || !customer) return <Preloader fullScreen />
 
   // Render different tabs
   const renderContent = () => {
@@ -358,14 +371,14 @@ export default function CustomerPortal() {
       return (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
-            <h1 style={{ fontSize: '28px', margin: 0 }}>Welcome back, {customer.name.split(' ')[0]}!</h1>
+            <h1 style={{ fontSize: '28px', margin: 0 }}>Welcome back, {customer?.name?.split(' ')[0] || 'Customer'}!</h1>
             
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               <ExportToolbar 
                 tableData={exportTableData} 
                 columns={exportColumns} 
-                fileName={`Customer_Portal_Report_${customer.name.replace(/\s+/g, '_')}`}
-                title={`${customer.companies?.name || 'SoluoPrint'} - ${customer.name}'s Portal Summary`}
+                fileName={`Customer_Portal_Report_${(customer?.name || 'Customer').replace(/\s+/g, '_')}`}
+                title={`${customer?.companies?.name || 'SoluoPrint'} - ${customer?.name || 'Customer'}'s Portal Summary`}
                 currency={currency}
                 reportRef={reportRef}
               />
@@ -982,9 +995,9 @@ export default function CustomerPortal() {
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo" style={{ cursor: 'default' }}>
-            <div className="sidebar-logo-icon">{(customer.companies?.name || 'S')[0].toUpperCase()}</div>
+            <div className="sidebar-logo-icon">{(customer?.companies?.name || 'SoluoPrint')[0].toUpperCase()}</div>
             <span className="sidebar-logo-text" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
-              {customer.companies?.name || 'SoluoPrint'}
+              {customer?.companies?.name || 'SoluoPrint'}
             </span>
           </div>
         </div>
@@ -1052,7 +1065,7 @@ export default function CustomerPortal() {
             >
               <HelpCircle size={16} /> Portal Guide
             </button>
-            <span style={{ fontWeight: 500 }}>{customer.name}</span>
+            <span style={{ fontWeight: 500 }}>{customer?.name || 'Customer'}</span>
             <button onClick={handleLogout} className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <LogOut size={14} /> Logout
             </button>
@@ -1071,7 +1084,7 @@ export default function CustomerPortal() {
           onSuccess={() => {
             setShowUploadModal(false)
             loadData()
-            setActiveTab('jobs')
+            setActiveTab('staged')
           }}
         />
       )}
@@ -1079,7 +1092,7 @@ export default function CustomerPortal() {
       {selectedJobForReceipt && (
         <ReceiptModal
           job={selectedJobForReceipt}
-          company={customer.companies}
+          company={customer?.companies}
           onClose={() => setSelectedJobForReceipt(null)}
           gatewaysActive={gatewaysActive}
           onPay={(job) => {
@@ -1111,7 +1124,7 @@ export default function CustomerPortal() {
       <OnboardingTour 
         tourKey="onboarding_customer_v2" 
         steps={[
-          { title: `Welcome to ${customer.companies?.name || 'our'}'s Portal!`, content: "Track all your print jobs, view your outstanding balances, and make payments all in one place." },
+          { title: `Welcome to ${customer?.companies?.name || 'our'}'s Portal!`, content: "Track all your print jobs, view your outstanding balances, and make payments all in one place." },
           { title: "Upload New Jobs", content: "Need something printed? Click the 'Upload New Job' button to securely send your design files and exact dimensions directly to the print shop." },
           { title: "Pay Online", content: "If you have an outstanding balance, you can easily pay it online. Just click the 'Pay' button next to any unpaid job!" }
         ]} 
@@ -1124,7 +1137,7 @@ export default function CustomerPortal() {
           onClose={() => setEditingStagedJob(null)}
           onSuccess={() => {
             setEditingStagedJob(null)
-            fetchCustomerData(customer.id)
+            loadData()
           }}
         />
       )}

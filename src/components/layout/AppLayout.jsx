@@ -379,7 +379,7 @@ export default function AppLayout() {
             </NavLink>
           )}
           {hasPermission('manage_settings') && (
-            <NavLink to="/settings" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+            <NavLink to="/settings" end className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
               <Settings />
               <span>Settings</span>
             </NavLink>

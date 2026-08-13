@@ -17,6 +17,10 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
 
   useEffect(() => {
     async function loadGateways() {
+      if (!customer?.company_id) {
+        setLoading(false)
+        return
+      }
       const { data, error } = await supabase
         .from('payment_gateways')
         .select('*')
@@ -38,7 +42,7 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
       setLoading(false)
     }
     loadGateways()
-  }, [customer.company_id])
+  }, [customer?.company_id])
 
   async function handlePayment(e) {
     e.preventDefault()
