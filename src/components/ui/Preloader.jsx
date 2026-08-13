@@ -1,6 +1,9 @@
 import React from 'react'
 
 export default function Preloader({ fullScreen = false, message = null, style = {} }) {
+  const [imgLoaded, setImgLoaded] = React.useState(false)
+  const [imgError, setImgError] = React.useState(false)
+
   return (
     <div
       style={{
@@ -33,7 +36,7 @@ export default function Preloader({ fullScreen = false, message = null, style = 
         />
 
         {/* Brand Logo Right Underneath Spinner */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', maxWidth: '85vw', marginTop: '-18px' }}>
+        <div style={{ display: imgLoaded || imgError ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', width: '100%', maxWidth: '85vw', marginTop: '-18px' }}>
           <img 
             src="/logo.png" 
             alt="SoluoPrint Logo" 
@@ -42,40 +45,42 @@ export default function Preloader({ fullScreen = false, message = null, style = 
               maxHeight: '190px', 
               maxWidth: '480px', 
               width: '85vw', 
-              objectFit: 'contain'
+              objectFit: 'contain',
+              display: imgLoaded && !imgError ? 'block' : 'none'
             }}
-            onError={(e) => {
-              e.target.style.display = 'none'
-              const fallback = e.target.parentElement.querySelector('.brand-logo-fallback')
-              if (fallback) fallback.style.display = 'flex'
+            onLoad={() => setImgLoaded(true)}
+            onError={() => {
+              setImgError(true)
             }}
           />
-          <div 
-            className="brand-logo-fallback" 
-            style={{ 
-              display: 'none', 
-              alignItems: 'center', 
-              gap: '12px', 
-              fontWeight: 800, 
-              fontSize: '36px', 
-              color: '#1e293b', 
-              letterSpacing: '-1px' 
-            }}
-          >
-            <div style={{
-              width: '54px',
-              height: '54px',
-              borderRadius: '14px',
-              background: 'linear-gradient(135deg, #2563eb, #10b981)',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 900,
-              fontSize: '24px'
-            }}>SP</div>
-            <span>Soluo<span style={{ color: '#10b981' }}>Print</span></span>
-          </div>
+          {imgError && (
+            <div 
+              className="brand-logo-fallback" 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px', 
+                fontWeight: 800, 
+                fontSize: '36px', 
+                color: '#1e293b', 
+                letterSpacing: '-1px' 
+              }}
+            >
+              <div style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #2563eb, #10b981)',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '24px'
+              }}>SP</div>
+              <span>Soluo<span style={{ color: '#10b981' }}>Print</span></span>
+            </div>
+          )}
         </div>
 
         {message && (
