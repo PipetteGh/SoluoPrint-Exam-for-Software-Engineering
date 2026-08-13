@@ -242,7 +242,7 @@ export default function CustomerPortal() {
 
       showToast('Uploaded job deleted successfully.', 'success')
 
-      logAudit({
+      await logAudit({
         companyId: customer?.company_id,
         userId: customer?.id,
         actorName: customer?.name || 'Customer',

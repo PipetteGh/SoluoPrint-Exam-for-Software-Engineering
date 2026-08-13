@@ -204,6 +204,15 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
     setUploadProgress(5)
     setUploadStep('Initializing job upload...')
 
+    // Capture form values BEFORE any state resets so side effects have correct data
+    const capturedCategory = form.category
+    const capturedNotes = form.notes
+    const capturedWidth = form.width
+    const capturedHeight = form.height
+    const capturedUnit = form.unit
+    const capturedQuantity = form.quantity
+    const capturedFileCount = files.length
+
     try {
       const newFileUrls = await uploadFiles(files)
       const combinedImages = [...existingImages, ...newFileUrls]
@@ -217,13 +226,13 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
       setUploadProgress(80)
       setUploadStep(jobToEdit ? 'Updating your uploaded job...' : 'Submitting to shop Job List for review...')
 
-      const dimensionsDesc = form.width && form.height ? ` (${form.width}x${form.height} ${form.unit})` : ''
+      const dimensionsDesc = capturedWidth && capturedHeight ? ` (${capturedWidth}x${capturedHeight} ${capturedUnit})` : ''
       const payload = {
         company_id: customer.company_id,
         customer_id: customer.id,
-        services: [{ name: form.category, unit_price: 0 }],
-        description: `${form.category}${dimensionsDesc} - Qty: ${form.quantity}`,
-        notes: form.notes || '',
+        services: [{ name: capturedCategory, unit_price: 0 }],
+        description: `${capturedCategory}${dimensionsDesc} - Qty: ${capturedQuantity}`,
+        notes: capturedNotes || '',
         status: jobToEdit?.status || 'Pending',
         images: combinedImages
       }
@@ -252,9 +261,16 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
 
       setUploadProgress(100)
       setUploadStep(jobToEdit ? 'Update Complete!' : 'Upload Complete!')
-      showToast(jobToEdit ? 'Uploaded job updated successfully!' : 'Job uploaded to shop Job List successfully! The shop will review and convert it shortly.', 'success')
 
-      // Reset form state so next upload opens clean
+      // Show success toast BEFORE closing
+      showToast(
+        jobToEdit
+          ? 'Uploaded job updated successfully!'
+          : 'Job uploaded to shop Job List successfully! The shop will review and convert it shortly.',
+        'success'
+      )
+
+      // Reset form state
       setForm({
         category: categories[0] || 'General',
         notes: '',
@@ -265,29 +281,32 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
       })
       setFiles([])
       setExistingImages([])
+      setLoading(false)
 
-      // Instantly trigger modal callbacks so the modal disappears without waiting for side effects
-      if (onSuccess) onSuccess(savedJob)
-      if (onClose) onClose()
+      // Close the modal — use setTimeout to ensure React commits the toast before unmount
+      setTimeout(() => {
+        if (onSuccess) onSuccess(savedJob)
+        if (onClose) onClose()
+      }, 150)
 
-      // Side Effects (Audit, Notifications, SMS, Email) in safe non-blocking background task
-      (async () => {
+      // Fire-and-forget side effects using captured values (NOT state which was already reset)
+      ;(async () => {
         try {
           await recalculateCustomerBalance(customer.id).catch(() => {})
 
-          logAudit({
+          await logAudit({
             companyId: customer.company_id,
             userId: customer.id,
             actorName: customer.name || 'Customer',
             actorRole: 'Customer',
             action: 'CUSTOMER_JOB_UPLOAD',
-            details: `Uploaded new staged job (${form.category}) with ${files.length} file(s). Notes: "${form.notes || 'None'}"`
+            details: `Uploaded new staged job (${capturedCategory}) with ${capturedFileCount} file(s). Notes: "${capturedNotes || 'None'}"`
           })
 
           await supabase.from('notifications').insert({
             company_id: customer.company_id,
             title: 'New Customer Job Upload',
-            message: `${customer.name} uploaded a new ${form.category} job to Job List with ${files.length} file(s). ${form.notes ? `Notes: "${form.notes}"` : ''}`,
+            message: `${customer.name} uploaded a new ${capturedCategory} job to Job List with ${capturedFileCount} file(s). ${capturedNotes ? `Notes: "${capturedNotes}"` : ''}`,
             type: 'job_created',
             read: false
           }).catch(e => console.warn('Notification insert warn:', e))
@@ -299,7 +318,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
 
           if (companyData) {
             if (companyData.phone && smsSettings) {
-              const alertText = `Alert: ${customer.name} has uploaded a new ${form.category} job to your Job List with ${files.length} artwork file(s).`
+              const alertText = `Alert: ${customer.name} has uploaded a new ${capturedCategory} job to your Job List with ${capturedFileCount} artwork file(s).`
               sendSms(companyData.phone, alertText, smsSettings).catch(console.error)
             }
 
@@ -308,8 +327,8 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
               const emailHtml = `
                 <h2>New Artwork Upload Received</h2>
                 <p><strong>Customer:</strong> ${customer.name}</p>
-                <p><strong>Category:</strong> ${form.category}</p>
-                <p><strong>Files Uploaded:</strong> ${files.length} artwork file(s)</p>
+                <p><strong>Category:</strong> ${capturedCategory}</p>
+                <p><strong>Files Uploaded:</strong> ${capturedFileCount} artwork file(s)</p>
               `
               sendEmail(companyData.email, emailSubject, emailHtml, companyData.name || 'SoluoPrint Alerts').catch(console.error)
             }
@@ -318,10 +337,10 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
           console.warn('Background notification alert warn:', e)
         }
       })()
+
     } catch (err) {
       console.error('Job submit error:', err)
       showToast(err.message || 'Failed to submit job.', 'error')
-    } finally {
       setLoading(false)
     }
   }

@@ -612,9 +612,10 @@ export default function PrintJobsPage() {
           await recalculateCustomerBalance(targetJob.customer_id)
         }
         
-        // Audit log
-        import('../lib/auditLogger').then(({ logAudit }) => {
-          logAudit({
+        // Audit log — await so the insert completes
+        try {
+          const { logAudit } = await import('../lib/auditLogger')
+          await logAudit({
             companyId: company?.id,
             userId: profile?.id,
             actorName: profile?.full_name || 'Admin User',
@@ -622,7 +623,9 @@ export default function PrintJobsPage() {
             action: 'JOB_DELETE',
             details: `Deleted print job ${targetJob?.job_number || id}`
           })
-        })
+        } catch (auditErr) {
+          console.warn('Audit log warning:', auditErr)
+        }
         
         load()
       }
