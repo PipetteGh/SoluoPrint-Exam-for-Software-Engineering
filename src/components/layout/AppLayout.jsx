@@ -6,7 +6,7 @@ import {
   Star, Receipt, BarChart2, Settings, ChevronDown,
   Search, Plus, Bell, Printer, LogOut, User,
   Building2, Wrench, Tag, Maximize2, Wallet,
-  TrendingUp, AlertCircle, ChevronRight, X, ClipboardList, MessageSquare, CheckCheck
+  TrendingUp, AlertCircle, ChevronRight, X, ClipboardList, MessageSquare, CheckCheck, ShieldCheck
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import NewJobModal from '../modals/NewJobModal'
@@ -371,6 +371,12 @@ export default function AppLayout() {
                 </>
               )}
             </div>
+          )}
+          {hasPermission('manage_settings') && (
+            <NavLink to="/settings/audit-logs" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+              <ShieldCheck />
+              <span>Audit & Activity Logs</span>
+            </NavLink>
           )}
           {hasPermission('manage_settings') && (
             <NavLink to="/settings" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>

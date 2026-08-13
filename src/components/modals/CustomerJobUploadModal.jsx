@@ -7,9 +7,17 @@ import { sendEmail } from '../../lib/email'
 import { logAudit } from '../../lib/auditLogger'
 import { recalculateCustomerBalance } from '../../lib/balanceUtils'
 
-export default function CustomerJobUploadModal({ onClose, onSuccess, customer }) {
-  const [form, setForm] = useState({ category: 'General', notes: '', width: '', height: '', unit: 'ft', quantity: 1 })
+export default function CustomerJobUploadModal({ onClose, onSuccess, customer, jobToEdit = null }) {
+  const [form, setForm] = useState({ 
+    category: jobToEdit?.services?.[0]?.name || 'General', 
+    notes: jobToEdit?.notes || '', 
+    width: '', 
+    height: '', 
+    unit: 'ft', 
+    quantity: 1 
+  })
   const [files, setFiles] = useState([])
+  const [existingImages, setExistingImages] = useState(jobToEdit?.images || [])
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadStep, setUploadStep] = useState('')
@@ -44,6 +52,10 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
 
   const removeFile = (index) => {
     setFiles(files.filter((_, i) => i !== index))
+  }
+
+  const removeExistingImage = (index) => {
+    setExistingImages(existingImages.filter((_, i) => i !== index))
   }
 
   // Primary: PHP upload (production server)
@@ -103,6 +115,42 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
     return urls
   }
 
+  function generateFormattedFileName(custName, originalFileName, index = 0) {
+    const cleanName = (custName || 'Customer')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .replace(/_+/g, '_')
+    
+    const now = new Date()
+    const pad = n => String(n).padStart(2, '0')
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    const timeStr = `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
+    
+    const ext = originalFileName.includes('.') ? originalFileName.split('.').pop() : 'png'
+    const suffix = index > 0 ? `_${index + 1}` : ''
+    return `${cleanName}_${dateStr}_${timeStr}${suffix}.${ext}`
+  }
+
+  function readFileAsDataUrl(file, index = 0) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result
+        const formattedName = generateFormattedFileName(customer?.name, file.name, index)
+        if (dataUrl && dataUrl.startsWith('data:')) {
+          const parts = dataUrl.split(';base64,')
+          const mime = parts[0].replace('data:', '')
+          const base64Data = parts[1]
+          // Embed customer_date_time.ext filename inside custom data URL scheme
+          resolve(`data:${mime};name=${encodeURIComponent(formattedName)};base64,${base64Data}`)
+        } else {
+          resolve(dataUrl)
+        }
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
   async function uploadFiles(fileArray) {
     if (!fileArray || fileArray.length === 0) return []
     
@@ -120,9 +168,12 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
         setUploadProgress(70)
         return result
       } catch (storageErr) {
-        console.warn('Supabase Storage failed, storing file names only:', storageErr.message)
+        console.warn('Supabase Storage failed, converting file to Base64 Data URL:', storageErr.message)
+        setUploadProgress(50)
+        setUploadStep('Encoding artwork for instant cloud preview...')
+        const dataUrls = await Promise.all(fileArray.map((f, i) => readFileAsDataUrl(f, i)))
         setUploadProgress(70)
-        return fileArray.map(f => `[uploaded:${f.name}]`)
+        return dataUrls
       }
     }
   }
@@ -139,28 +190,50 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
     setUploadStep('Initializing job upload...')
 
     try {
-      const fileUrls = await uploadFiles(files)
+      const newFileUrls = await uploadFiles(files)
+      const combinedImages = [...existingImages, ...newFileUrls]
+
+      if (combinedImages.length === 0) {
+        showToast('Please attach at least one file for your print job.', 'error')
+        setLoading(false)
+        return
+      }
 
       setUploadProgress(80)
-      setUploadStep('Submitting to shop Job List for review...')
+      setUploadStep(jobToEdit ? 'Updating your uploaded job...' : 'Submitting to shop Job List for review...')
 
-      // Primary: Insert into job_list ONLY (Staged Jobs for company review)
       const dimensionsDesc = form.width && form.height ? ` (${form.width}x${form.height} ${form.unit})` : ''
-      const { data: newJob, error: jobErr } = await supabase
-        .from('job_list')
-        .insert({
-          company_id: customer.company_id,
-          customer_id: customer.id,
-          services: [{ name: form.category, unit_price: 0 }],
-          description: `${form.category}${dimensionsDesc} - Qty: ${form.quantity}`,
-          notes: form.notes || '',
-          status: 'Pending',
-          images: fileUrls
-        })
-        .select()
-        .single()
+      const payload = {
+        company_id: customer.company_id,
+        customer_id: customer.id,
+        services: [{ name: form.category, unit_price: 0 }],
+        description: `${form.category}${dimensionsDesc} - Qty: ${form.quantity}`,
+        notes: form.notes || '',
+        status: jobToEdit?.status || 'Pending',
+        images: combinedImages
+      }
 
-      if (jobErr) throw jobErr
+      let savedJob = null
+      if (jobToEdit) {
+        const { data: updatedJob, error: updateErr } = await supabase
+          .from('job_list')
+          .update(payload)
+          .eq('id', jobToEdit.id)
+          .select()
+          .single()
+
+        if (updateErr) throw updateErr
+        savedJob = updatedJob
+      } else {
+        const { data: newJob, error: insertErr } = await supabase
+          .from('job_list')
+          .insert(payload)
+          .select()
+          .single()
+
+        if (insertErr) throw insertErr
+        savedJob = newJob
+      }
 
       setUploadProgress(90)
       setUploadStep('Notifying shop administration...')
@@ -217,10 +290,22 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
       }
 
       setUploadProgress(100)
-      setUploadStep('Upload Complete!')
-      showToast(`Job uploaded to shop Job List successfully! The shop will review and convert it shortly.`, 'success')
+      setUploadStep(jobToEdit ? 'Update Complete!' : 'Upload Complete!')
+      showToast(jobToEdit ? 'Uploaded job updated successfully!' : 'Job uploaded to shop Job List successfully! The shop will review and convert it shortly.', 'success')
 
-      if (onSuccess) onSuccess(newJob)
+      // Reset form state so next upload opens clean
+      setForm({
+        category: categories[0] || 'General',
+        notes: '',
+        width: '',
+        height: '',
+        unit: 'ft',
+        quantity: 1
+      })
+      setFiles([])
+      setExistingImages([])
+
+      if (onSuccess) onSuccess(savedJob)
       if (onClose) onClose()
     } catch (err) {
       console.error('Job submit error:', err)

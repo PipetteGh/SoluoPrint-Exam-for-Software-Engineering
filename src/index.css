@@ -462,13 +462,12 @@ body {
 }
 
 .stat-value {
-  font-size: clamp(16px, 2.5vw, 22px);
+  font-size: clamp(15px, 2.5vw, 22px);
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .stat-sub {
@@ -479,7 +478,7 @@ body {
 
 @media (max-width: 640px) {
   .stat-grid {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 12px;
   }
   
@@ -489,7 +488,13 @@ body {
   }
   
   .stat-value {
-    font-size: clamp(14px, 4vw, 18px);
+    font-size: clamp(14px, 4.5vw, 18px);
+  }
+}
+
+@media (max-width: 420px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
   }
 }
 
