@@ -6,11 +6,13 @@ import {
   Star, Receipt, BarChart2, Settings, ChevronDown,
   Search, Plus, Bell, Printer, LogOut, User,
   Building2, Wrench, Tag, Maximize2, Wallet,
-  TrendingUp, AlertCircle, ChevronRight, X, ClipboardList
+  TrendingUp, AlertCircle, ChevronRight, X, ClipboardList, MessageSquare, CheckCheck
 } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 import NewJobModal from '../modals/NewJobModal'
 import NewPaymentModal from '../modals/NewPaymentModal'
 import NewCustomerModal from '../modals/NewCustomerModal'
+import AdminSupportChatModal from '../chat/AdminSupportChatModal'
 import OnboardingTour from '../ui/OnboardingTour'
 
 export default function AppLayout() {
@@ -23,6 +25,9 @@ export default function AppLayout() {
   const [showQuickActions, setShowQuickActions] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [showAdminChat, setShowAdminChat] = useState(false)
   const [showNewJob, setShowNewJob] = useState(false)
   const [showNewPayment, setShowNewPayment] = useState(false)
   const [showNewCustomer, setShowNewCustomer] = useState(false)
@@ -30,12 +35,69 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const quickActionsRef = useRef(null)
   const userMenuRef = useRef(null)
+  const notificationsRef = useRef(null)
+
+  // Real-time notifications listener for current company
+  useEffect(() => {
+    if (!company?.id) return
+    loadNotifications()
+
+    const channel = supabase
+      .channel(`public:notifications:${company.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `company_id=eq.${company.id}` },
+        (payload) => {
+          setNotifications(prev => [payload.new, ...prev])
+          setUnreadCount(count => count + 1)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [company?.id])
+
+  async function loadNotifications() {
+    try {
+      const { data } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('company_id', company.id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (data) {
+        setNotifications(data)
+        const unread = data.filter(n => !n.read).length
+        setUnreadCount(unread)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  async function markAllAsRead() {
+    try {
+      await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('company_id', company.id)
+
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      setUnreadCount(0)
+    } catch (e) {
+      console.error(e)
+    }
+  }
 
   // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e) {
       if (quickActionsRef.current && !quickActionsRef.current.contains(e.target)) setShowQuickActions(false)
       if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setShowUserMenu(false)
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target)) setShowNotifications(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -306,10 +368,79 @@ export default function AppLayout() {
               )}
             </div>
 
-            {/* Notifications */}
-            <button className="icon-btn" onClick={() => setShowNotifications(v => !v)}>
-              <Bell />
+            {/* Live Support Chat Button */}
+            <button className="icon-btn" title="Live Customer Support Desk" onClick={() => setShowAdminChat(true)} style={{ color: '#2563eb', background: '#eff6ff' }}>
+              <MessageSquare size={18} />
             </button>
+
+            {/* Notifications */}
+            <div className="dropdown" ref={notificationsRef} style={{ position: 'relative' }}>
+              <button className="icon-btn" onClick={() => setShowNotifications(v => !v)} style={{ position: 'relative' }}>
+                <Bell size={18} />
+                {unreadCount > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-2px',
+                    right: '-2px',
+                    backgroundColor: '#ef4444',
+                    color: 'white',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    padding: '2px 5px',
+                    borderRadius: '10px',
+                    lineHeight: 1
+                  }}>
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {showNotifications && (
+                <div style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '100%',
+                  marginTop: '8px',
+                  width: '340px',
+                  maxHeight: '420px',
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
+                  border: '1px solid var(--border)',
+                  zIndex: 100,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+                    <div style={{ fontWeight: 700, fontSize: '14px', color: '#1e293b' }}>Notifications ({unreadCount})</div>
+                    {unreadCount > 0 && (
+                      <button onClick={markAllAsRead} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <CheckCheck size={14} /> Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ flex: 1, overflowY: 'auto', maxHeight: '320px' }}>
+                    {notifications.length === 0 ? (
+                      <div style={{ padding: '30px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
+                        No notifications yet.
+                      </div>
+                    ) : (
+                      notifications.map(n => (
+                        <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', background: n.read ? 'white' : '#eff6ff' }}>
+                          <div style={{ fontWeight: 600, fontSize: '13px', color: '#1e293b', marginBottom: '2px' }}>{n.title}</div>
+                          <div style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.3 }}>{n.message}</div>
+                          <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+                            {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* User menu */}
             <div className="dropdown" ref={userMenuRef}>
@@ -344,6 +475,9 @@ export default function AppLayout() {
       </div>
 
       {/* Modals */}
+      {showAdminChat && company?.id && (
+        <AdminSupportChatModal companyId={company.id} onClose={() => setShowAdminChat(false)} />
+      )}
       {showNewJob && <NewJobModal onClose={() => setShowNewJob(false)} />}
       {showNewPayment && <NewPaymentModal onClose={() => setShowNewPayment(false)} />}
       {showNewCustomer && <NewCustomerModal onClose={() => setShowNewCustomer(false)} />}

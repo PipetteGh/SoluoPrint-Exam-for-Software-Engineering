@@ -7,6 +7,7 @@ import ExportToolbar from '../components/ui/ExportToolbar'
 import CustomerJobUploadModal from '../components/modals/CustomerJobUploadModal'
 import CustomerPaymentModal from '../components/modals/CustomerPaymentModal'
 import ReceiptModal from '../components/modals/ReceiptModal'
+import SupportChatWidget from '../components/chat/SupportChatWidget'
 import OnboardingTour from '../components/ui/OnboardingTour'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
@@ -463,8 +464,8 @@ export default function CustomerPortal() {
                             {job.status || 'Pending'}
                           </span>
                         </td>
-                        <td style={{ textAlign: 'right' }}>{currency} {Number(job.total_price).toFixed(2)}</td>
-                        <td style={{ textAlign: 'right' }}>{currency} {Number(job.balance).toFixed(2)}</td>
+                        <td style={{ textAlign: 'right' }}>{currency} {Number(job.total_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td style={{ textAlign: 'right' }}>{currency} {Number(job.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td style={{ textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
                             <button className="btn btn-secondary btn-sm" onClick={() => setSelectedJobForReceipt(job)} title="View Receipt">
@@ -559,8 +560,8 @@ export default function CustomerPortal() {
                             {job.status || 'Pending'}
                           </span>
                         </td>
-                        <td style={{ textAlign: 'right' }}>{currency} {Number(job.total_price).toFixed(2)}</td>
-                        <td style={{ textAlign: 'right' }}>{currency} {Number(job.balance).toFixed(2)}</td>
+                        <td style={{ textAlign: 'right' }}>{currency} {Number(job.total_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td style={{ textAlign: 'right' }}>{currency} {Number(job.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td style={{ textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
                             <button className="btn btn-secondary btn-sm" onClick={() => setSelectedJobForReceipt(job)} title="View Receipt">
@@ -762,6 +763,8 @@ export default function CustomerPortal() {
           }}
         />
       )}
+
+      <SupportChatWidget customer={customer} />
 
       <OnboardingTour 
         tourKey="onboarding_customer_v2" 

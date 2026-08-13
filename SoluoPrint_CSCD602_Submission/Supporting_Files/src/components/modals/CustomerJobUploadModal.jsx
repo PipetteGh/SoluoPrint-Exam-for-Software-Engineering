@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { X, Upload, File as FileIcon, XCircle } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
+import { sendSms } from '../../lib/sms'
+import { sendEmail } from '../../lib/email'
 
 export default function CustomerJobUploadModal({ onClose, onSuccess, customer }) {
   const [form, setForm] = useState({ category: 'General', notes: '', width: '', height: '', unit: 'ft', quantity: 1 })
@@ -91,8 +93,42 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
         company_id: customer.company_id,
         title: 'New Customer Job Upload',
         message: `${customer.name} just uploaded a new ${form.category} job with ${files.length} file(s).`,
-        type: 'job_created'
+        type: 'job_created',
+        read: false
       })
+
+      // Fetch company settings & admin info for SMS/Email alert
+      try {
+        const [{ data: companyData }, { data: smsSettings }] = await Promise.all([
+          supabase.from('companies').select('name, email, phone').eq('id', customer.company_id).single(),
+          supabase.from('sms_settings').select('*').eq('company_id', customer.company_id).maybeSingle()
+        ])
+
+        if (companyData) {
+          // Send SMS alert to shop admin if configured
+          if (companyData.phone && smsSettings) {
+            const alertText = `Alert: ${customer.name} has uploaded a new ${form.category} print job with ${files.length} artwork file(s). Log in to review.`
+            sendSms(companyData.phone, alertText, smsSettings).catch(console.error)
+          }
+
+          // Send Email alert to shop admin
+          if (companyData.email) {
+            const emailSubject = `[SoluoPrint] New Artwork Upload from ${customer.name}`
+            const emailHtml = `
+              <h2>New Artwork Upload Received</h2>
+              <p><strong>Customer:</strong> ${customer.name} (${customer.email || 'N/A'})</p>
+              <p><strong>Category:</strong> ${form.category}</p>
+              <p><strong>Files Uploaded:</strong> ${files.length} artwork file(s)</p>
+              <p><strong>Notes:</strong> ${form.notes || 'None'}</p>
+              <br/>
+              <p>Please log in to your SoluoPrint dashboard at <a href="https://print.soluotech.com">https://print.soluotech.com</a> to review and process this job.</p>
+            `
+            sendEmail(companyData.email, emailSubject, emailHtml, companyData.name || 'SoluoPrint Alerts').catch(console.error)
+          }
+        }
+      } catch (e) {
+        console.error('Admin notification dispatch error:', e)
+      }
 
       showToast('Job uploaded successfully! We will review it shortly.', 'success')
       if (onSuccess) onSuccess(newJob)

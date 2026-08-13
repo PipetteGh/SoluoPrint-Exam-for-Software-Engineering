@@ -59,25 +59,30 @@ SoluoPrint implements a comprehensive feature set demonstrating disciplined Adva
 - **Environment Variables & Secrets Management:** Securely handles API keys for SMS, Email, Payment Gateways, and Database connectivity.
 
 ### 2. Customer Portal & Dual Authentication
-- **Customer Logins:** Customers access their own portal via custom usernames (e.g., CUST-XXXX) using the `customers` database table.
-- **Customer Job Upload:** Customers can upload large print job files directly to the server via the `api/upload.php` endpoint. Image files are compressed dynamically.
-- **Outstanding Balance Payments:** Customers can initiate payment workflows directly from their portal to settle their print shop balances.
+- **Customer Logins & Credentials:** Customers access their own dedicated portal via custom usernames (e.g., `CUST-BENM-8564` / `r1i9kpvb`) or email address.
+- **Customer Job Intake & File Upload:** Customers submit custom print orders, enter dimensions, select categories, and upload artwork files directly to the server via `/api/upload.php`.
+- **Self-Service Online Payment Checkout:** Customers can pay their outstanding balances directly from their portal dashboard using integrated digital payment gateways (Paystack, Hubtel Mobile Money, Flutterwave).
+- **Itemized Invoice & Receipt Modal:** Clicking any Job ID (e.g., `PD1001`) opens an itemized invoice/receipt showing order breakdown, formatted date & time timestamps, and a direct "Pay Online Now" checkout button.
+- **Live Customer Support Chat System:** Embedded real-time live chat widget allowing customers to communicate directly with shop staff and receive instant support.
 
-### 3. Print Job Management & Workflow
-- **Full CRUD for Print Jobs:** Create, read, update, and delete print jobs with rich metadata (quantity, material, status).
-- **Status Tracking:** Real-time visual tracking of job states: `Pending`, `In Progress`, `Completed`, `Delivered`.
-- **Automated Workflow Actions:** E.g., when a job is marked "Completed" and the balance is settled, workflows dynamically adjust.
+### 3. Print Job Management & Production Pipeline
+- **Full CRUD for Print Jobs:** Create, read, update, and delete print jobs with rich metadata (quantity, width, height, unit, material, category, unit price).
+- **Status Tracking:** Real-time visual tracking of job production states: `Pending`, `In Progress`, `Completed`, `Delivered`.
+- **Bulk Job Presets:** Auto-populates preset dimensions (Stickers 2x2, 3x3, 4x4, A4/A3 Sheets, Banners) with width, height, unit, and unit price populated atomically.
 
 ### 4. Financial & Payment Processing
-- **Invoicing & Balances:** Tracks total job cost, amount paid, and outstanding balances per customer.
-- **Record Payments:** Supports logging payments via Cash, Mobile Money, Bank Transfer, Visa, etc.
-- **Payment Gateway Integrations:** Supports API keys configuration for Hubtel, Paystack, and Flutterwave to facilitate digital transactions.
+- **Invoicing & Balance Tracking:** Automated calculations of total job cost, discount percentage, premium percentage, amount paid, and remaining balance.
+- **Record Payments:** Supports logging payments via Cash, Mobile Money, Bank Transfer, Visa, and digital gateways.
+- **Payment Gateway Integrations Settings:** Dedicated settings UI for configuring API keys and webhooks for Hubtel (Mobile Money), Paystack, and Flutterwave.
 - **Dynamic Balance Resolution:** When payment covers a balance, the system automatically resolves the invoice state.
+- **Comma-Formatted Currency Standard:** All monetary figures across dashboards, financial cards, and reports are formatted with thousands separators (e.g. `¢78,003.00`).
 
-### 5. Custom Notification Engine
-- **SMS Integration:** Fully integrated with `smsgh` API. Automated SMS receipts with the exact template:
-  > *"Hello [Name], your payment of: [Currency] [Amount] has been received. Your remaining balance is [Currency] [Balance]. Regards: EKON Graphix - 0248228841 Powered by: Soluotech"*
-- **SMTP Email Integration:** Integrated via `api/send_email.php`. Dispatches transactional emails over secure port 465 using the `notify@soluotech.com` sender.
+### 5. Custom Notification Engine & Real-time Alerts
+- **Real-Time Notification Badge:** Admin top navigation bar features a real-time notification bell with red badge counter for incoming customer artwork uploads and support messages.
+- **Shop Admin Live Support Desk:** Staff can view all active customer support chat threads, inspect customer debt balances, and send instant replies in real-time.
+- **SMS Integration:** Fully integrated with `smsonlineapi` / `smsgh` API. Automated SMS receipts with exact template:
+  > *"Hello [Name], your payment of: [Currency] [Amount] has been received. Your remaining balance is [Currency] [Balance]. Regards: EKON Graphix - 0248228841 Powered by: SoluoPrint"*
+- **SMTP Email Integration:** Integrated via `api/send_email.php`. Dispatches transactional emails and artwork upload notifications over secure port 465 using the `notify@soluotech.com` sender.
 
 ### 6. Admin Dashboard & Analytics
 - **Financial Metrics:** Real-time calculations of Total Revenue, Total Debt (Receivables), and processing volume.

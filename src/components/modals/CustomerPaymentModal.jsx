@@ -132,41 +132,49 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
   }
 
   if (loading) return (
-    <div className="modal-overlay">
-      <div className="modal-content"><div className="spinner"></div></div>
+    <div className="modal-overlay" style={{ zIndex: 1100, backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)' }}>
+      <div className="modal-content" style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)' }}>
+        <div className="spinner"></div>
+      </div>
     </div>
   )
 
   const hasGateways = gateways.paystack || gateways.hubtel || gateways.flutterwave
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: '450px' }}>
-        <div className="modal-header">
-          <h2 className="modal-title">{job ? `Pay for Job #${job.job_number || 'N/A'}` : 'Pay Outstanding Balance'}</h2>
-          <button className="btn-close" onClick={onClose}><X size={20} /></button>
+    <div className="modal-overlay" style={{ zIndex: 1100, backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)' }}>
+      <div className="modal-content" style={{ maxWidth: '480px', width: '90%', backgroundColor: '#ffffff', color: '#0f172a', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)', padding: '28px', border: '1px solid #cbd5e1' }}>
+        <div className="modal-header" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '20px' }}>
+          <h2 className="modal-title" style={{ color: '#0f172a', fontSize: '20px', fontWeight: 700 }}>
+            {job ? `Pay for Job #${job.job_number || 'N/A'}` : 'Pay Outstanding Balance'}
+          </h2>
+          <button className="btn-close" onClick={onClose} style={{ color: '#64748b' }}><X size={20} /></button>
         </div>
 
-        <form onSubmit={handlePayment} className="modal-body">
-          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <p style={{ color: 'var(--text-muted)', margin: '0 0 8px' }}>Total Outstanding</p>
-            <h2 style={{ margin: 0, fontSize: '32px' }}>{currency} {Number(maxAmount).toFixed(2)}</h2>
+        <form onSubmit={handlePayment} className="modal-body" style={{ padding: 0 }}>
+          <div style={{ textAlign: 'center', marginBottom: '24px', backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+            <p style={{ color: '#64748b', margin: '0 0 4px', fontSize: '13px', fontWeight: 500 }}>Total Outstanding Balance</p>
+            <h2 style={{ margin: 0, fontSize: '32px', color: '#1e293b', fontWeight: 800 }}>
+              {currency} {Number(maxAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </h2>
           </div>
 
           {!hasGateways ? (
-            <div className="error-alert" style={{ textAlign: 'center' }}>
-              No payment gateways are currently enabled by the shop. Please contact them to make a payment.
+            <div className="error-alert" style={{ textAlign: 'center', padding: '16px', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: '8px' }}>
+              No payment gateways are currently enabled by the shop. Please contact staff to settle payment.
             </div>
           ) : (
             <>
               <div className="form-group">
-                <label className="form-label">Amount to Pay</label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }}>{currency}</span>
+                <label className="form-label" style={{ color: '#1e293b', fontWeight: 600, fontSize: '14px', marginBottom: '8px' }}>Amount to Pay</label>
+                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'white' }}>
+                  <span style={{ backgroundColor: '#f1f5f9', padding: '10px 16px', fontWeight: 700, color: '#334155', borderRight: '1px solid #cbd5e1', fontSize: '15px' }}>
+                    {currency}
+                  </span>
                   <input
                     type="number"
                     className="form-control"
-                    style={{ paddingLeft: '32px' }}
+                    style={{ border: 'none', height: '44px', paddingLeft: '14px', fontSize: '16px', fontWeight: 600, width: '100%', outline: 'none' }}
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
                     max={balance}
@@ -177,46 +185,49 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
                 </div>
               </div>
 
-              <div className="form-group" style={{ marginTop: '24px' }}>
-                <label className="form-label">Select Payment Method</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="form-group" style={{ marginTop: '20px' }}>
+                <label className="form-label" style={{ color: '#1e293b', fontWeight: 600, fontSize: '14px', marginBottom: '10px' }}>Select Payment Method</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   
                   {gateways.paystack && (
                     <label style={{
-                      display: 'flex', alignItems: 'center', gap: '12px', padding: '16px',
-                      border: `1px solid ${selectedMethod === 'Paystack' ? 'var(--primary)' : 'var(--border)'}`,
-                      borderRadius: '8px', cursor: 'pointer',
-                      backgroundColor: selectedMethod === 'Paystack' ? 'rgba(37,99,235,0.05)' : 'white'
+                      display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
+                      border: `2px solid ${selectedMethod === 'Paystack' ? '#2563eb' : '#cbd5e1'}`,
+                      borderRadius: '10px', cursor: 'pointer',
+                      backgroundColor: selectedMethod === 'Paystack' ? '#eff6ff' : 'white',
+                      transition: 'all 0.15s ease'
                     }}>
-                      <input type="radio" name="method" checked={selectedMethod === 'Paystack'} onChange={() => setSelectedMethod('Paystack')} style={{ accentColor: 'var(--primary)' }} />
+                      <input type="radio" name="method" checked={selectedMethod === 'Paystack'} onChange={() => setSelectedMethod('Paystack')} style={{ accentColor: '#2563eb', width: '18px', height: '18px' }} />
                       <CreditCard size={20} style={{ color: '#0ea5e9' }} />
-                      <span style={{ fontWeight: 500 }}>Pay with Paystack</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '14px' }}>Pay with Paystack (Card / MoMo)</span>
                     </label>
                   )}
 
                   {gateways.hubtel && (
                     <label style={{
-                      display: 'flex', alignItems: 'center', gap: '12px', padding: '16px',
-                      border: `1px solid ${selectedMethod === 'Hubtel' ? 'var(--primary)' : 'var(--border)'}`,
-                      borderRadius: '8px', cursor: 'pointer',
-                      backgroundColor: selectedMethod === 'Hubtel' ? 'rgba(37,99,235,0.05)' : 'white'
+                      display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
+                      border: `2px solid ${selectedMethod === 'Hubtel' ? '#2563eb' : '#cbd5e1'}`,
+                      borderRadius: '10px', cursor: 'pointer',
+                      backgroundColor: selectedMethod === 'Hubtel' ? '#eff6ff' : 'white',
+                      transition: 'all 0.15s ease'
                     }}>
-                      <input type="radio" name="method" checked={selectedMethod === 'Hubtel'} onChange={() => setSelectedMethod('Hubtel')} style={{ accentColor: 'var(--primary)' }} />
+                      <input type="radio" name="method" checked={selectedMethod === 'Hubtel'} onChange={() => setSelectedMethod('Hubtel')} style={{ accentColor: '#2563eb', width: '18px', height: '18px' }} />
                       <Smartphone size={20} style={{ color: '#f59e0b' }} />
-                      <span style={{ fontWeight: 500 }}>Pay with Hubtel (MoMo)</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '14px' }}>Pay with Hubtel Mobile Money</span>
                     </label>
                   )}
 
                   {gateways.flutterwave && (
                     <label style={{
-                      display: 'flex', alignItems: 'center', gap: '12px', padding: '16px',
-                      border: `1px solid ${selectedMethod === 'Flutterwave' ? 'var(--primary)' : 'var(--border)'}`,
-                      borderRadius: '8px', cursor: 'pointer',
-                      backgroundColor: selectedMethod === 'Flutterwave' ? 'rgba(37,99,235,0.05)' : 'white'
+                      display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
+                      border: `2px solid ${selectedMethod === 'Flutterwave' ? '#2563eb' : '#cbd5e1'}`,
+                      borderRadius: '10px', cursor: 'pointer',
+                      backgroundColor: selectedMethod === 'Flutterwave' ? '#eff6ff' : 'white',
+                      transition: 'all 0.15s ease'
                     }}>
-                      <input type="radio" name="method" checked={selectedMethod === 'Flutterwave'} onChange={() => setSelectedMethod('Flutterwave')} style={{ accentColor: 'var(--primary)' }} />
+                      <input type="radio" name="method" checked={selectedMethod === 'Flutterwave'} onChange={() => setSelectedMethod('Flutterwave')} style={{ accentColor: '#2563eb', width: '18px', height: '18px' }} />
                       <CreditCard size={20} style={{ color: '#f43f5e' }} />
-                      <span style={{ fontWeight: 500 }}>Pay with Flutterwave</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '14px' }}>Pay with Flutterwave</span>
                     </label>
                   )}
 
@@ -225,10 +236,10 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
             </>
           )}
 
-          <div className="modal-footer" style={{ marginTop: '24px' }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={processing}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={processing || !hasGateways}>
-              {processing ? 'Processing...' : `Pay ${currency}${Number(amount).toFixed(2)}`}
+          <div className="modal-footer" style={{ marginTop: '28px', paddingTop: '16px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={processing} style={{ borderRadius: '8px', padding: '10px 18px' }}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={processing || !hasGateways} style={{ backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', padding: '10px 22px', fontWeight: 600 }}>
+              {processing ? 'Processing Payment...' : `Pay ${currency}${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </button>
           </div>
         </form>

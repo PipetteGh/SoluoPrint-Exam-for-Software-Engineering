@@ -36,6 +36,23 @@ export default function ReceiptModal({ job, company, onClose, onPay, gatewaysAct
     }
   }
 
+  let itemTitle = job.services?.name || job.category || 'Print Job'
+  if (job.preset_size && !itemTitle.toLowerCase().includes(job.preset_size.toLowerCase())) {
+    itemTitle += ` (${job.preset_size})`
+  } else if (displayNotes) {
+    const presetMatch = displayNotes.match(/(Sticker\s+[A-Z0-9x\s]+|Preset:\s*[^;\n]+|[A-Z0-9]+\s+Sheet|Banner\s+[0-9x\s]+)/i)
+    if (presetMatch && !itemTitle.toLowerCase().includes(presetMatch[1].toLowerCase())) {
+      itemTitle += ` - ${presetMatch[1]}`
+    }
+  }
+
+  let dimensionStr = '-'
+  if (job.width && job.height) {
+    dimensionStr = `${job.width} × ${job.height} ${job.unit || ''}`.trim()
+  } else if (job.preset_size) {
+    dimensionStr = job.preset_size
+  }
+
   return (
     <div className="modal-overlay print-modal-overlay">
       <div className="modal modal-lg receipt-modal">
@@ -43,8 +60,8 @@ export default function ReceiptModal({ job, company, onClose, onPay, gatewaysAct
           <h2 className="modal-title">Receipt / Invoice #{job.job_number}</h2>
           <div style={{display:'flex', gap:'10px', alignItems: 'center'}}>
              {Number(job.balance) > 0 && onPay && (
-               <button className="btn btn-success" onClick={() => onPay(job)} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#10b981', color: 'white', border: 'none' }}>
-                 <CreditCard size={16} /> Pay Online Now ({currency}{Number(job.balance).toFixed(2)})
+               <button className="btn btn-success" onClick={() => onPay(job)} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#10b981', color: 'white', border: 'none', fontWeight: 600 }}>
+                 <CreditCard size={16} /> Pay Online Now ({currency}{Number(job.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                </button>
              )}
              <button className="btn btn-primary" onClick={handlePrint}><Printer size={16}/> Print</button>
@@ -80,7 +97,7 @@ export default function ReceiptModal({ job, company, onClose, onPay, gatewaysAct
            <table style={{width:'100%', borderCollapse:'collapse', marginBottom:'30px', fontSize: '14px'}}>
              <thead>
                <tr style={{background:'#f9fafb', borderBottom:'2px solid #ddd'}}>
-                 <th style={{padding:'12px', textAlign:'left'}}>Description</th>
+                 <th style={{padding:'12px', textAlign:'left'}}>Description &amp; Item Details</th>
                  <th style={{padding:'12px', textAlign:'center'}}>Dimensions</th>
                  <th style={{padding:'12px', textAlign:'center'}}>Qty</th>
                  <th style={{padding:'12px', textAlign:'right'}}>Unit Price</th>
@@ -92,55 +109,60 @@ export default function ReceiptModal({ job, company, onClose, onPay, gatewaysAct
                  bulkItems.map((item, i) => (
                    <tr key={i} style={{borderBottom:'1px solid #eee'}}>
                      <td style={{padding:'12px'}}>
-                       <div style={{fontWeight:600}}>{item.service}</div>
-                       {i === 0 && displayNotes && <div style={{fontSize:'12px', color:'#666', marginTop:'4px'}}>{displayNotes}</div>}
+                       <div style={{fontWeight:700, color: '#1e293b'}}>{item.service || item.category || 'Print Item'}</div>
+                       {item.notes && <div style={{fontSize:'12px', color:'#475569', marginTop:'2px'}}>{item.notes}</div>}
+                       {i === 0 && displayNotes && <div style={{fontSize:'12px', color:'#64748b', marginTop:'4px'}}>{displayNotes}</div>}
                      </td>
-                     <td style={{padding:'12px', textAlign:'center'}}>{item.dim}</td>
-                     <td style={{padding:'12px', textAlign:'center'}}>{item.qty}</td>
-                     <td style={{padding:'12px', textAlign:'right'}}>{currency}{item.price.toFixed(2)}</td>
-                     <td style={{padding:'12px', textAlign:'right'}}>{currency}{item.subtotal.toFixed(2)}</td>
+                     <td style={{padding:'12px', textAlign:'center', fontWeight:500}}>{item.dim || '-'}</td>
+                     <td style={{padding:'12px', textAlign:'center', fontWeight:600}}>{item.qty}</td>
+                     <td style={{padding:'12px', textAlign:'right'}}>{currency}{Number(item.price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                     <td style={{padding:'12px', textAlign:'right', fontWeight:600}}>{currency}{Number(item.subtotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                    </tr>
                  ))
                ) : (
                  <tr style={{borderBottom:'1px solid #eee'}}>
                    <td style={{padding:'12px'}}>
-                     <div style={{fontWeight:600}}>{job.services?.name || job.category}</div>
-                     {displayNotes && <div style={{fontSize:'12px', color:'#666', marginTop:'4px'}}>{displayNotes}</div>}
+                     <div style={{fontWeight:700, color: '#1e293b', fontSize: '15px'}}>{itemTitle}</div>
+                     {displayNotes && (
+                       <div style={{fontSize:'12px', color:'#475569', marginTop:'4px', whiteSpace: 'pre-wrap', lineHeight: 1.4}}>
+                         {displayNotes}
+                       </div>
+                     )}
                    </td>
-                   <td style={{padding:'12px', textAlign:'center'}}>{job.width && job.height ? `${job.width}×${job.height} ${job.unit}` : '-'}</td>
-                   <td style={{padding:'12px', textAlign:'center'}}>{job.quantity}</td>
-                   <td style={{padding:'12px', textAlign:'right'}}>{currency}{price.toFixed(2)}</td>
-                   <td style={{padding:'12px', textAlign:'right'}}>{currency}{subtotal.toFixed(2)}</td>
+                   <td style={{padding:'12px', textAlign:'center', fontWeight:500}}>{dimensionStr}</td>
+                   <td style={{padding:'12px', textAlign:'center', fontWeight:600}}>{job.quantity}</td>
+                   <td style={{padding:'12px', textAlign:'right'}}>{currency}{Number(price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                   <td style={{padding:'12px', textAlign:'right', fontWeight:600}}>{currency}{Number(subtotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                  </tr>
                )}
              </tbody>
            </table>
            
            <div style={{display:'flex', justifyContent:'flex-end'}}>
-             <div style={{width:'300px'}}>
+             <div style={{width:'320px'}}>
                <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', fontSize: '14px'}}>
                  <span style={{color:'#666'}}>Subtotal:</span>
-                 <span>{currency}{subtotal.toFixed(2)}</span>
+                 <span>{currency}{Number(subtotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                </div>
                {job.discount > 0 && (
                  <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', color:'#dc2626', fontSize: '14px'}}>
                    <span>Discount ({job.discount}%):</span>
-                   <span>-{currency}{discountAmt.toFixed(2)}</span>
+                   <span>-{currency}{Number(discountAmt).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                  </div>
                )}
                {job.premium > 0 && (
                  <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', fontSize: '14px'}}>
                    <span style={{color:'#666'}}>Premium ({job.premium}%):</span>
-                   <span>+{currency}{premiumAmt.toFixed(2)}</span>
+                   <span>+{currency}{Number(premiumAmt).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                  </div>
                )}
                <div style={{display:'flex', justifyContent:'space-between', padding:'12px 0', borderTop:'2px solid #ddd', borderBottom:'2px solid #ddd', marginTop:'8px', fontWeight:800, fontSize:'18px'}}>
                  <span>Total:</span>
-                 <span>{currency}{(job.total_price || 0).toFixed(2)}</span>
+                 <span>{currency}{Number(job.total_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                </div>
                <div style={{display:'flex', justifyContent:'space-between', padding:'8px 0', marginTop:'8px', color: (job.balance || 0) > 0 ? '#dc2626' : '#16a34a', fontWeight:600, fontSize: '14px'}}>
                  <span>Balance Due:</span>
-                 <span>{currency}{(job.balance || 0).toFixed(2)}</span>
+                 <span>{currency}{Number(job.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                </div>
              </div>
            </div>

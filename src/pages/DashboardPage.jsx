@@ -451,6 +451,11 @@ const getDateRange = (filter) => {
   return { start, end }
 }
 
+function formatMoney(amount) {
+  const val = Number(amount) || 0
+  return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 export default function DashboardPage() {
   const { profile, company, hasPermission } = useAuth()
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -732,7 +737,7 @@ export default function DashboardPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#166534', marginBottom: '8px', fontWeight: 500 }}>
                           <DollarSign size={14} /> Cash Received {cashFilter}
                         </div>
-                        <div style={{ fontSize: '24px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>{currency}{metrics.cashInFlow.toFixed(2)}</div>
+                        <div style={{ fontSize: '24px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>{currency}{formatMoney(metrics.cashInFlow)}</div>
                         <div style={{ fontSize: '10px', color: '#15803d' }}>Money received from payments</div>
                       </div>
                       <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '16px' }}>
@@ -806,25 +811,25 @@ export default function DashboardPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 500 }}>
                       <TrendingUp size={14} color="#10b981" /> Total Income (Year)
                     </div>
-                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#16a34a' }}>{currency}{metrics.totalYearIncoming.toFixed(2)}</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#16a34a' }}>{currency}{formatMoney(metrics.totalYearIncoming)}</div>
                   </div>
                   <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 500 }}>
                       <TrendingDown size={14} color="#ef4444" /> Total Expenses (Year)
                     </div>
-                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>{currency}{metrics.totalYearOutgoing.toFixed(2)}</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>{currency}{formatMoney(metrics.totalYearOutgoing)}</div>
                   </div>
                   <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 500 }}>
                       <DollarSign size={14} color="#3b82f6" /> Net Profit (Year)
                     </div>
-                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#2563eb' }}>{currency}{metrics.currentCashPosition.toFixed(2)}</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#2563eb' }}>{currency}{formatMoney(metrics.currentCashPosition)}</div>
                   </div>
                   <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 500 }}>
                       <Calendar size={14} color="#f59e0b" /> Income This Month
                     </div>
-                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#111827' }}>{currency}{metrics.totalMonthIncoming.toFixed(2)}</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#111827' }}>{currency}{formatMoney(metrics.totalMonthIncoming)}</div>
                   </div>
                 </div>
               )}
@@ -882,15 +887,15 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '11px', color: '#16a34a', marginBottom: '4px' }}>Incoming</div>
-                    <div style={{ fontSize: '15px', fontWeight: 600, color: '#16a34a' }}>{currency}{metrics.totalYearIncoming.toFixed(2)} +</div>
+                    <div style={{ fontSize: '15px', fontWeight: 600, color: '#16a34a' }}>{currency}{formatMoney(metrics.totalYearIncoming)} +</div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '11px', color: '#ef4444', marginBottom: '4px' }}>Outgoing</div>
-                    <div style={{ fontSize: '15px', fontWeight: 600, color: '#ef4444' }}>{currency}{metrics.totalYearOutgoing.toFixed(2)} -</div>
+                    <div style={{ fontSize: '15px', fontWeight: 600, color: '#ef4444' }}>{currency}{formatMoney(metrics.totalYearOutgoing)} -</div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '11px', color: '#2563eb', marginBottom: '4px' }}>Current Cash</div>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#2563eb' }}>{currency}{metrics.currentCashPosition.toFixed(2)} =</div>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#2563eb' }}>{currency}{formatMoney(metrics.currentCashPosition)} =</div>
                   </div>
                 </div>
               </div>
@@ -917,9 +922,9 @@ export default function DashboardPage() {
                     />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '10px 16px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '2px' }}></div> Income <span style={{ fontWeight: 600, color: '#16a34a' }}>{currency}{metrics.totalYearIncoming.toFixed(2)}</span></div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', background: '#ef4444', borderRadius: '2px' }}></div> Expenses <span style={{ fontWeight: 600, color: '#dc2626' }}>{currency}{metrics.totalYearOutgoing.toFixed(2)}</span></div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', background: '#3b82f6', borderRadius: '2px' }}></div> Net <span style={{ fontWeight: 600, color: '#2563eb' }}>{currency}{metrics.currentCashPosition.toFixed(2)}</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '2px' }}></div> Income <span style={{ fontWeight: 600, color: '#16a34a' }}>{currency}{formatMoney(metrics.totalYearIncoming)}</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', background: '#ef4444', borderRadius: '2px' }}></div> Expenses <span style={{ fontWeight: 600, color: '#dc2626' }}>{currency}{formatMoney(metrics.totalYearOutgoing)}</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', background: '#3b82f6', borderRadius: '2px' }}></div> Net <span style={{ fontWeight: 600, color: '#2563eb' }}>{currency}{formatMoney(metrics.currentCashPosition)}</span></div>
                   </div>
                 </div>
 
