@@ -13,7 +13,7 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
   const { showToast } = useToast()
   
   const currency = customer?.companies?.currency_symbol || '¢'
-  const maxAmount = job ? job.balance : balance
+  const maxAmount = job ? Number(job.balance || 0) : Number(balance || 0)
 
   useEffect(() => {
     async function loadGateways() {
@@ -46,7 +46,7 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
       showToast('Please select a payment method', 'error')
       return
     }
-    if (amount <= 0 || amount > maxAmount) {
+    if (amount <= 0 || (maxAmount > 0 && amount > maxAmount)) {
       showToast('Please enter a valid amount', 'error')
       return
     }
@@ -178,8 +178,8 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
                     style={{ border: 'none', height: '44px', paddingLeft: '14px', fontSize: '16px', fontWeight: 600, width: '100%', outline: 'none' }}
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
-                    max={balance}
-                    min="1"
+                    max={maxAmount > 0 ? maxAmount : undefined}
+                    min="0.01"
                     step="0.01"
                     required
                   />
