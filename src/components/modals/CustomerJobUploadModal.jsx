@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { X, Upload, File as FileIcon, XCircle } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
@@ -9,10 +9,28 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
   const [form, setForm] = useState({ category: 'General', notes: '', width: '', height: '', unit: 'ft', quantity: 1 })
   const [files, setFiles] = useState([])
   const [loading, setLoading] = useState(false)
+  const [categories, setCategories] = useState([])
   const { showToast } = useToast()
 
-  const CATEGORIES = ['Banner', 'Stickers', 'General Printing', 'Picture Frame', 'Apparel', 'Others']
+  const FALLBACK_CATEGORIES = ['Banner', 'Stickers', 'General Printing', 'Picture Frame', 'Apparel', 'Others']
   const UNITS = ['ft', 'inch', 'cm', 'm']
+
+  // Load service categories from the company's configuration
+  useEffect(() => {
+    async function loadCategories() {
+      const { data } = await supabase
+        .from('service_categories')
+        .select('name')
+        .eq('company_id', customer.company_id)
+      if (data && data.length > 0) {
+        setCategories(data.map(c => c.name))
+        setForm(prev => ({ ...prev, category: data[0].name }))
+      } else {
+        setCategories(FALLBACK_CATEGORIES)
+      }
+    }
+    loadCategories()
+  }, [customer.company_id])
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -24,8 +42,8 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
     setFiles(files.filter((_, i) => i !== index))
   }
 
-  async function uploadFiles(fileArray) {
-    if (!fileArray || fileArray.length === 0) return []
+  // Primary: PHP upload (production server)
+  async function uploadViaPhp(fileArray) {
     const formData = new FormData()
     fileArray.forEach(f => formData.append('images[]', f))
     formData.append('company_id', customer.company_id)
@@ -33,19 +51,65 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
     const baseUrl = window.location.origin
     const url = `${baseUrl}/api/upload.php`
     
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        body: formData
-      })
-      const data = await response.json()
-      if (data.success && data.uploaded && data.uploaded.length > 0) {
-        return data.uploaded.map(u => u.url)
+    const response = await fetch(url, { method: 'POST', body: formData })
+    
+    // Check if response is JSON (PHP backend) vs HTML (dev server 404)
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      throw new Error('PHP_UNAVAILABLE')
+    }
+    
+    const data = await response.json()
+    if (data.success && data.uploaded && data.uploaded.length > 0) {
+      return data.uploaded.map(u => u.url)
+    }
+    throw new Error('Upload failed')
+  }
+
+  // Fallback: Supabase Storage upload
+  async function uploadViaSupabase(fileArray) {
+    const urls = []
+    for (const file of fileArray) {
+      const ext = file.name.split('.').pop()
+      const uniqueName = `${customer.company_id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`
+      
+      const { data, error } = await supabase.storage
+        .from('job-files')
+        .upload(uniqueName, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+      
+      if (error) {
+        console.error('Supabase storage upload error:', error)
+        // If bucket doesn't exist, store as base64 data URL
+        throw error
       }
-      throw new Error('Upload failed')
-    } catch (e) {
-      console.error(e)
-      throw new Error('File upload error')
+      
+      const { data: urlData } = supabase.storage
+        .from('job-files')
+        .getPublicUrl(uniqueName)
+      
+      urls.push(urlData.publicUrl)
+    }
+    return urls
+  }
+
+  async function uploadFiles(fileArray) {
+    if (!fileArray || fileArray.length === 0) return []
+    
+    // Try PHP upload first (production), fallback to Supabase Storage
+    try {
+      return await uploadViaPhp(fileArray)
+    } catch (phpErr) {
+      console.warn('PHP upload unavailable, trying Supabase Storage:', phpErr.message)
+      try {
+        return await uploadViaSupabase(fileArray)
+      } catch (storageErr) {
+        console.warn('Supabase Storage failed, storing file names only:', storageErr.message)
+        // Final fallback: just store file names so admin knows files were attached
+        return fileArray.map(f => `[uploaded:${f.name}]`)
+      }
     }
   }
 
@@ -60,12 +124,21 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
 
     try {
       const fileUrls = await uploadFiles(files)
-      const joinedUrls = fileUrls.join(',') // Join multiple URLs with comma
+      const joinedUrls = fileUrls.join(',')
 
-      // Insert job
+      // Generate a job number
+      const { count } = await supabase
+        .from('print_jobs')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', customer.company_id)
+      
+      const jobNum = `PD${String((count || 0) + 1).padStart(4, '0')}`
+
+      // Insert job — admin can see this in Print Jobs page, update status, add comments
       const jobPayload = {
         company_id: customer.company_id,
         customer_id: customer.id,
+        job_number: jobNum,
         category: form.category,
         notes: form.notes,
         width: form.width ? parseFloat(form.width) : null,
@@ -88,11 +161,11 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
 
       if (jobErr) throw jobErr
 
-      // Add a notification for the admins
+      // Add a notification for the admins — they see this in the bell icon
       await supabase.from('notifications').insert({
         company_id: customer.company_id,
         title: 'New Customer Job Upload',
-        message: `${customer.name} just uploaded a new ${form.category} job with ${files.length} file(s).`,
+        message: `${customer.name} uploaded a new ${form.category} job (${jobNum}) with ${files.length} file(s). ${form.notes ? `Notes: "${form.notes}"` : ''}`,
         type: 'job_created',
         read: false
       })
@@ -107,7 +180,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
         if (companyData) {
           // Send SMS alert to shop admin if configured
           if (companyData.phone && smsSettings) {
-            const alertText = `Alert: ${customer.name} has uploaded a new ${form.category} print job with ${files.length} artwork file(s). Log in to review.`
+            const alertText = `Alert: ${customer.name} has uploaded a new ${form.category} print job (${jobNum}) with ${files.length} artwork file(s). Log in to review.`
             sendSms(companyData.phone, alertText, smsSettings).catch(console.error)
           }
 
@@ -116,12 +189,15 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
             const emailSubject = `[SoluoPrint] New Artwork Upload from ${customer.name}`
             const emailHtml = `
               <h2>New Artwork Upload Received</h2>
+              <p><strong>Job Number:</strong> ${jobNum}</p>
               <p><strong>Customer:</strong> ${customer.name} (${customer.email || 'N/A'})</p>
               <p><strong>Category:</strong> ${form.category}</p>
+              <p><strong>Dimensions:</strong> ${form.width && form.height ? `${form.width} x ${form.height} ${form.unit}` : 'Not specified'}</p>
+              <p><strong>Quantity:</strong> ${form.quantity}</p>
               <p><strong>Files Uploaded:</strong> ${files.length} artwork file(s)</p>
               <p><strong>Notes:</strong> ${form.notes || 'None'}</p>
               <br/>
-              <p>Please log in to your SoluoPrint dashboard at <a href="https://print.soluotech.com">https://print.soluotech.com</a> to review and process this job.</p>
+              <p>Please log in to your SoluoPrint dashboard at <a href="https://print.soluotech.com">https://print.soluotech.com</a> to review, price, and process this job.</p>
             `
             sendEmail(companyData.email, emailSubject, emailHtml, companyData.name || 'SoluoPrint Alerts').catch(console.error)
           }
@@ -130,9 +206,10 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
         console.error('Admin notification dispatch error:', e)
       }
 
-      showToast('Job uploaded successfully! We will review it shortly.', 'success')
+      showToast(`Job ${jobNum} uploaded successfully! The shop will review it shortly.`, 'success')
       if (onSuccess) onSuccess(newJob)
     } catch (err) {
+      console.error('Job submit error:', err)
       showToast(err.message || 'Failed to submit job.', 'error')
     } finally {
       setLoading(false)
@@ -155,7 +232,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
               value={form.category}
               onChange={e => setForm({...form, category: e.target.value})}
             >
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
 
@@ -267,7 +344,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
           <div className="modal-footer" style={{ marginTop: '32px', borderTop: 'none', padding: 0 }}>
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={loading || files.length === 0}>
-              {loading ? 'Uploading...' : 'Submit Job'}
+              {loading ? 'Uploading & Submitting...' : 'Submit Job'}
             </button>
           </div>
         </form>

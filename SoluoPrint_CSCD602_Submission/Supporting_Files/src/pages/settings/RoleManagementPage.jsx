@@ -5,12 +5,24 @@ import { useToast } from '../../contexts/ToastContext'
 import { supabase } from '../../lib/supabase'
 import { ArrowLeft, Shield, Plus, X, Check, Trash2 } from 'lucide-react'
 
-const PERMISSIONS = ['view_dashboard','view_customers','manage_customers','view_jobs','manage_jobs','view_payments','manage_payments','view_expenses','manage_expenses','view_reports','manage_settings']
+const PERMISSIONS = [
+  // Core views
+  'view_dashboard',
+  'view_customers', 'manage_customers', 'add_customers',
+  'view_jobs', 'manage_jobs', 'add_jobs',
+  'view_payments', 'manage_payments', 'add_payments',
+  'view_expenses', 'manage_expenses',
+  'view_reports',
+  // Communication & Support
+  'view_chat', 'manage_chat',
+  // Administration
+  'manage_settings', 'manage_users', 'manage_integrations'
+]
 
 export default function RoleManagementPage() {
   const navigate = useNavigate()
   const { company } = useAuth()
-  const toast = useToast()
+  const { showToast } = useToast()
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -22,12 +34,27 @@ export default function RoleManagementPage() {
     setLoading(true)
     const { data } = await supabase.from('roles').select('*').eq('company_id', company.id)
     if (data && data.length === 0) {
-      // Create default roles
+      // Create default roles with expanded permissions
       const defaultRoles = [
         { company_id: company.id, name: 'Owner', is_default: true, permissions: { all: true } },
-        { company_id: company.id, name: 'Manager', permissions: { view_dashboard:true, view_customers:true, manage_customers:true, view_jobs:true, manage_jobs:true, view_payments:true, manage_payments:true, view_expenses:true, manage_expenses:true, view_reports:true } },
-        { company_id: company.id, name: 'Staff', permissions: { view_dashboard:true, view_customers:true, view_jobs:true, manage_jobs:true, view_payments:true } },
-        { company_id: company.id, name: 'Viewer', permissions: { view_dashboard:true, view_customers:true, view_jobs:true, view_payments:true } }
+        { company_id: company.id, name: 'Manager', permissions: {
+          view_dashboard:true, view_customers:true, manage_customers:true, add_customers:true,
+          view_jobs:true, manage_jobs:true, add_jobs:true,
+          view_payments:true, manage_payments:true, add_payments:true,
+          view_expenses:true, manage_expenses:true,
+          view_reports:true,
+          view_chat:true, manage_chat:true,
+          manage_users:true
+        }},
+        { company_id: company.id, name: 'Staff', permissions: {
+          view_dashboard:true, view_customers:true, add_customers:true,
+          view_jobs:true, manage_jobs:true, add_jobs:true,
+          view_payments:true, add_payments:true,
+          view_chat:true
+        }},
+        { company_id: company.id, name: 'Viewer', permissions: {
+          view_dashboard:true, view_customers:true, view_jobs:true, view_payments:true, view_chat:true
+        }}
       ]
       await supabase.from('roles').insert(defaultRoles)
       const { data: d2 } = await supabase.from('roles').select('*').eq('company_id', company.id)
@@ -49,10 +76,10 @@ export default function RoleManagementPage() {
       .update({ permissions: newPermissions })
       .eq('id', role.id)
     
-    if (error) toast.error('Failed to update permission: ' + error.message)
+    if (error) showToast('Failed to update permission: ' + error.message, 'error')
     else {
       setRoles(roles.map(r => r.id === role.id ? { ...r, permissions: newPermissions } : r))
-      toast.success('Permission updated')
+      showToast('Permission updated', 'success')
     }
   }
 
@@ -65,9 +92,9 @@ export default function RoleManagementPage() {
       .insert([{ company_id: company.id, name: newRoleName, permissions: {} }])
       .select()
     
-    if (error) toast.error('Failed to create role: ' + error.message)
+    if (error) showToast('Failed to create role: ' + error.message, 'error')
     else {
-      toast.success('Role created')
+      showToast('Role created', 'success')
       setRoles([...roles, data[0]])
       setShowAddModal(false)
       setNewRoleName('')
@@ -77,11 +104,23 @@ export default function RoleManagementPage() {
   async function deleteRole(id) {
     if (!confirm('Are you sure you want to delete this role? Users assigned to it will lose their permissions.')) return
     const { error } = await supabase.from('roles').delete().eq('id', id)
-    if (error) toast.error('Failed to delete role: ' + error.message)
+    if (error) showToast('Failed to delete role: ' + error.message, 'error')
     else {
-      toast.success('Role deleted')
+      showToast('Role deleted', 'success')
       setRoles(roles.filter(r => r.id !== id))
     }
+  }
+
+  // Group permissions for better visual organization
+  const permissionGroups = {
+    'Core': ['view_dashboard'],
+    'Customers': ['view_customers', 'manage_customers', 'add_customers'],
+    'Jobs': ['view_jobs', 'manage_jobs', 'add_jobs'],
+    'Payments': ['view_payments', 'manage_payments', 'add_payments'],
+    'Expenses': ['view_expenses', 'manage_expenses'],
+    'Reports': ['view_reports'],
+    'Communication': ['view_chat', 'manage_chat'],
+    'Administration': ['manage_settings', 'manage_users', 'manage_integrations']
   }
 
   return (
@@ -119,40 +158,48 @@ export default function RoleManagementPage() {
                   <Check size={18} /> Full Access to all features
                 </div>
               ) : (
-                <div style={{display:'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px'}}>
-                  {PERMISSIONS.map(p => (
-                    <div 
-                      key={p} 
-                      onClick={() => togglePermission(role, p)}
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--border)',
-                        background: role.permissions?.[p] ? '#f0fdf4' : '#f8fafc',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        fontSize: '13px',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      <div style={{
-                        width: '18px',
-                        height: '18px',
-                        borderRadius: '4px',
-                        border: '2px solid',
-                        borderColor: role.permissions?.[p] ? '#16a34a' : '#cbd5e1',
-                        background: role.permissions?.[p] ? '#16a34a' : 'white',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}>
-                        {role.permissions?.[p] && <Check size={14} color="white" />}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {Object.entries(permissionGroups).map(([groupName, perms]) => (
+                    <div key={groupName}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>{groupName}</div>
+                      <div style={{display:'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px'}}>
+                        {perms.map(p => (
+                          <div 
+                            key={p} 
+                            onClick={() => togglePermission(role, p)}
+                            style={{
+                              padding: '8px 12px',
+                              borderRadius: '8px',
+                              border: '1px solid var(--border)',
+                              background: role.permissions?.[p] ? '#f0fdf4' : '#f8fafc',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              fontSize: '13px',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <div style={{
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '4px',
+                              border: '2px solid',
+                              borderColor: role.permissions?.[p] ? '#16a34a' : '#cbd5e1',
+                              background: role.permissions?.[p] ? '#16a34a' : 'white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              {role.permissions?.[p] && <Check size={14} color="white" />}
+                            </div>
+                            <span style={{ color: role.permissions?.[p] ? '#166534' : 'var(--text-muted)', fontWeight: role.permissions?.[p] ? 600 : 400 }}>
+                              {p.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                      <span style={{ color: role.permissions?.[p] ? '#166534' : 'var(--text-muted)', fontWeight: role.permissions?.[p] ? 600 : 400 }}>
-                        {p.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                      </span>
                     </div>
                   ))}
                 </div>
