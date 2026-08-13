@@ -317,18 +317,20 @@ export default function CustomerPortal() {
           
           {/* Stat Cards - matching admin dashboard spacing */}
           <div className="stat-grid" style={{ marginBottom: '32px' }}>
-            <div className="stat-card" style={{ position: 'relative' }}>
-              <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)' }}><CreditCard size={22} color="#ef4444" /></div>
-              <div className="stat-info">
-                <div className="stat-label">Outstanding Balance</div>
-                <div className="stat-value" style={{ color: Number(customer?.balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
-                  {currency} {Math.max(0, Number(customer?.balance || 0)).toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+            <div className="stat-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1', minWidth: '160px' }}>
+                <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)' }}><CreditCard size={22} color="#ef4444" /></div>
+                <div className="stat-info">
+                  <div className="stat-label">Outstanding Balance</div>
+                  <div className="stat-value" style={{ color: Number(customer?.balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
+                    {currency} {Math.max(0, Number(customer?.balance || 0)).toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </div>
                 </div>
               </div>
               {Number(customer.balance) > 0 && gatewaysActive && (
                 <button 
                   className="btn btn-primary btn-sm" 
-                  style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)' }}
+                  style={{ flexShrink: 0 }}
                   onClick={() => setShowPaymentModal(true)}
                 >
                   Pay Now
@@ -362,7 +364,7 @@ export default function CustomerPortal() {
           </div>
 
           {/* Charts Row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '32px' }}>
             <div className="card">
               <div className="card-header"><div className="card-title">Monthly Spending ({new Date().getFullYear()})</div></div>
               <div className="card-body" style={{ height: '300px' }}>
@@ -403,7 +405,7 @@ export default function CustomerPortal() {
           </div>
 
           {/* Second Charts Row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '32px' }}>
             <div className="card">
               <div className="card-header"><div className="card-title">Job Status Distribution</div></div>
               <div className="card-body" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '280px' }}>
