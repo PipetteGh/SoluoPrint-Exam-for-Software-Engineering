@@ -94,7 +94,7 @@ export async function notifyCustomer(companyId, customerId, eventType, content) 
     // Format the message with Hello [Name] and Regards: [CompanyName] - [Phone]
     const companyName = company?.name || 'the shop'
     const companyPhone = company?.phone ? ` - ${company.phone}` : ''
-    const personalizedContent = `Hello ${customer.name}, ${content} Regards: ${companyName}${companyPhone} Powered by: SoluoPrint`
+    const personalizedContent = `Hello ${customer.name}, ${content} Regards: ${companyName}${companyPhone}. Powered by: Soluotech`
 
     return await sendSms(customer.phone, personalizedContent, settings || {})
   } catch (error) {

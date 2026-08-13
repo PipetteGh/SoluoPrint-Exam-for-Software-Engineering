@@ -1,18 +1,30 @@
 import React, { useState } from 'react'
-import { FileText, Eye, Download, Image as ImageIcon, ExternalLink, X, File } from 'lucide-react'
+import { FileText, Download, Image as ImageIcon, File, Loader2, CheckCircle2 } from 'lucide-react'
+import { useToast } from '../../contexts/ToastContext'
 
 /**
- * Normalizes any file URL to a valid loadable URL
+ * Normalizes any file URL or Data URL for downloading
  */
 export function normalizeFileUrl(url) {
   if (!url) return ''
   let cleaned = String(url).trim()
+
   if (cleaned.startsWith('[uploaded:')) {
-    cleaned = cleaned.replace('[uploaded:', '').replace(']', '')
+    cleaned = cleaned.replace('[uploaded:', '').replace(']', '').trim()
   }
-  if (cleaned.startsWith('http://') || cleaned.startsWith('https://') || cleaned.startsWith('data:')) {
+
+  // Strip embedded ;name=... metadata from Data URL
+  if (cleaned.startsWith('data:')) {
+    if (cleaned.includes(';name=')) {
+      cleaned = cleaned.replace(/;name=[^;]+;/, ';')
+    }
     return cleaned
   }
+
+  if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+    return cleaned
+  }
+
   // Relative URL
   if (cleaned.startsWith('/')) {
     return `${window.location.origin}${cleaned}`
@@ -21,12 +33,44 @@ export function normalizeFileUrl(url) {
 }
 
 /**
+ * Extracts human-readable filename and original extension as stored in database/directory
+ */
+export function extractFileName(rawUrl, index = 0) {
+  if (!rawUrl) return `File_${index + 1}`
+  const str = String(rawUrl).trim()
+
+  if (str.startsWith('[uploaded:')) {
+    const rawName = str.replace('[uploaded:', '').replace(']', '').trim()
+    return rawName || `File_${index + 1}`
+  }
+
+  if (str.includes(';name=')) {
+    const match = str.match(/;name=([^;]+);/)
+    if (match && match[1]) {
+      return decodeURIComponent(match[1])
+    }
+  }
+
+  const clean = str.split('?')[0].split('#')[0]
+  const name = clean.split('/').pop()
+  if (name && name.length > 3 && !name.startsWith('data:')) {
+    return name
+  }
+
+  if (str.startsWith('data:image/png')) return `Artwork_${index + 1}.png`
+  if (str.startsWith('data:image/jpeg') || str.startsWith('data:image/jpg')) return `Artwork_${index + 1}.jpg`
+  if (str.startsWith('data:image/webp')) return `Artwork_${index + 1}.webp`
+  if (str.startsWith('data:application/pdf')) return `Document_${index + 1}.pdf`
+  return `File_${index + 1}`
+}
+
+/**
  * Helper to check if URL represents a PDF document
  */
 export function isPdfFile(url) {
   if (!url) return false
   const lower = String(url).toLowerCase()
-  return lower.endsWith('.pdf') || lower.includes('.pdf?') || lower.includes('application/pdf')
+  return lower.includes('application/pdf') || lower.endsWith('.pdf') || lower.includes('.pdf?')
 }
 
 /**
@@ -36,21 +80,103 @@ export function isImageFile(url) {
   if (!url) return false
   const lower = String(url).toLowerCase()
   return (
+    lower.includes('image/') ||
     lower.endsWith('.png') ||
     lower.endsWith('.jpg') ||
     lower.endsWith('.jpeg') ||
     lower.endsWith('.webp') ||
     lower.endsWith('.gif') ||
     lower.endsWith('.svg') ||
-    lower.startsWith('data:image/')
+    lower.startsWith('data:image/') ||
+    lower.startsWith('[uploaded:')
   )
 }
 
 /**
- * Renders a full file preview gallery supporting Images, PDFs, and Documents.
+ * Native Browser Blob Download Engine (Guarantees 100% exact binary format & extension)
+ * Accepts optional onStart and onComplete callbacks for progress UI feedback
+ */
+export async function downloadFile(rawUrl, fallbackName = 'download', onStart = () => {}, onComplete = () => {}) {
+  try {
+    onStart()
+    const fileName = extractFileName(rawUrl) || fallbackName
+    const str = String(rawUrl).trim()
+
+    // 1. If it's a Data URL (base64)
+    if (str.startsWith('data:')) {
+      const validDataUrl = str.replace(/;name=[^;]+;/, ';')
+      const parts = validDataUrl.split(';base64,')
+
+      if (parts.length === 2) {
+        const mime = parts[0].replace('data:', '') || 'application/octet-stream'
+        const cleanBase64 = parts[1].replace(/\s/g, '').replace(/[^A-Za-z0-9+/=]/g, '')
+
+        const binary = window.atob(cleanBase64)
+        const len = binary.length
+        const bytes = new Uint8Array(len)
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binary.charCodeAt(i)
+        }
+
+        const blob = new Blob([bytes], { type: mime })
+        const blobUrl = URL.createObjectURL(blob)
+
+        const a = document.createElement('a')
+        a.href = blobUrl
+        a.download = fileName
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 3000)
+        onComplete(true, fileName)
+        return
+      }
+    }
+
+    // 2. Normal HTTP/HTTPS or relative URL
+    const fullUrl = normalizeFileUrl(str)
+    try {
+      const res = await fetch(fullUrl)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 3000)
+      onComplete(true, fileName)
+    } catch (fetchErr) {
+      const a = document.createElement('a')
+      a.href = fullUrl
+      a.download = fileName
+      a.target = '_blank'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      onComplete(true, fileName)
+    }
+  } catch (err) {
+    console.error('Download exception:', err)
+    onComplete(false, fallbackName)
+  }
+}
+
+/**
+ * Renders attached file cards with active downloading state, loader spinner & toast feedback.
  */
 export default function FileGallery({ files = [], title = "Attached Files" }) {
-  const [activePreview, setActivePreview] = useState(null) // { url, type, name }
+  const [downloadingIndex, setDownloadingIndex] = useState(null)
+  const [downloadedIndex, setDownloadedIndex] = useState(null)
+  
+  let showToast = () => {}
+  try {
+    const toastCtx = useToast()
+    if (toastCtx && toastCtx.showToast) showToast = toastCtx.showToast
+  } catch (e) {
+    // Optional fallback if rendered outside ToastContext
+  }
 
   // Normalize input files to an array of URLs
   let fileList = []
@@ -70,6 +196,27 @@ export default function FileGallery({ files = [], title = "Attached Files" }) {
     )
   }
 
+  const handleDownload = async (rawUrl, fileName, index) => {
+    setDownloadingIndex(index)
+    showToast(`Preparing download for ${fileName}...`, 'info')
+
+    await downloadFile(
+      rawUrl,
+      fileName,
+      () => {},
+      (success, name) => {
+        setDownloadingIndex(null)
+        if (success) {
+          setDownloadedIndex(index)
+          showToast(`${name || fileName} downloaded successfully!`, 'success')
+          setTimeout(() => setDownloadedIndex(null), 4000)
+        } else {
+          showToast(`Failed to download ${name || fileName}. Please try again.`, 'error')
+        }
+      }
+    )
+  }
+
   return (
     <div style={{ width: '100%' }}>
       {title && (
@@ -78,230 +225,105 @@ export default function FileGallery({ files = [], title = "Attached Files" }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '10px' }}>
         {fileList.map((rawUrl, i) => {
-          const fullUrl = normalizeFileUrl(rawUrl)
           const isPdf = isPdfFile(rawUrl)
           const isImg = isImageFile(rawUrl)
-          const fileName = rawUrl.split('/').pop() || `File ${i + 1}`
+          const fileName = extractFileName(rawUrl, i)
+          const isDownloading = downloadingIndex === i
+          const isDownloaded = downloadedIndex === i
 
-          if (isPdf) {
-            return (
-              <div
-                key={i}
-                style={{
-                  border: '1px solid #fca5a5',
-                  backgroundColor: '#fef2f2',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  gap: '8px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                  <FileText size={22} color="#dc2626" style={{ flexShrink: 0 }} />
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#991b1b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={fileName}>
-                    {fileName}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    style={{ flex: 1, padding: '4px 8px', fontSize: '11px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
-                    onClick={() => setActivePreview({ url: fullUrl, type: 'pdf', name: fileName })}
-                  >
-                    <Eye size={12} /> View
-                  </button>
-                  <a
-                    href={fullUrl}
-                    download={fileName}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn btn-sm"
-                    style={{ padding: '4px 8px', fontSize: '11px', background: 'white', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '6px', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    title="Download PDF"
-                  >
-                    <Download size={12} />
-                  </a>
-                </div>
-              </div>
-            )
-          }
-
-          if (isImg) {
-            return (
-              <div
-                key={i}
-                style={{
-                  position: 'relative',
-                  height: '110px',
-                  borderRadius: '10px',
-                  overflow: 'hidden',
-                  border: '1px solid var(--border)',
-                  backgroundColor: '#f8fafc',
-                  group: 'file-item'
-                }}
-              >
-                <img
-                  src={fullUrl}
-                  alt={fileName}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
-                  onClick={() => setActivePreview({ url: fullUrl, type: 'image', name: fileName })}
-                  onError={(e) => {
-                    // Fallback graphic if image path doesn't resolve
-                    e.target.style.display = 'none'
-                    const parent = e.target.parentElement
-                    if (parent) {
-                      parent.style.display = 'flex'
-                      parent.style.alignItems = 'center'
-                      parent.style.justifyContent = 'center'
-                      parent.style.flexDirection = 'column'
-                      parent.innerHTML = `<span style="font-size:11px; color:#64748b;">📄 Image File</span>`
-                    }
-                  }}
-                />
-                <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: 'rgba(15, 23, 42, 0.5)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  opacity: 0,
-                  transition: 'opacity 0.2s ease',
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                onMouseLeave={e => e.currentTarget.style.opacity = 0}
-                onClick={() => setActivePreview({ url: fullUrl, type: 'image', name: fileName })}
-                >
-                  <button className="btn btn-sm" style={{ background: 'white', color: '#1e293b', border: 'none', padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Eye size={12} /> View
-                  </button>
-                  <a href={fullUrl} download={fileName} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ background: 'white', color: '#2563eb', padding: '6px', borderRadius: '6px', display: 'flex' }}>
-                    <Download size={12} />
-                  </a>
-                </div>
-              </div>
-            )
-          }
-
-          // Generic Document File
           return (
             <div
               key={i}
               style={{
-                border: '1px solid var(--border)',
-                backgroundColor: '#f8fafc',
+                border: isDownloading ? '1px solid #3b82f6' : isDownloaded ? '1px solid #10b981' : '1px solid var(--border)',
+                backgroundColor: isDownloading ? '#eff6ff' : isDownloaded ? '#f0fdf4' : '#ffffff',
                 borderRadius: '10px',
-                padding: '12px',
+                padding: '12px 14px',
                 display: 'flex',
-                flexDirection: 'column',
+                alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: '8px'
+                gap: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                transition: 'all 0.2s ease'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                <File size={20} color="#2563eb" style={{ flexShrink: 0 }} />
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={fileName}>
-                  {fileName}
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden', flex: 1 }}>
+                {isPdf ? (
+                  <FileText size={22} color="#dc2626" style={{ flexShrink: 0 }} />
+                ) : isImg ? (
+                  <ImageIcon size={22} color="#2563eb" style={{ flexShrink: 0 }} />
+                ) : (
+                  <File size={22} color="#64748b" style={{ flexShrink: 0 }} />
+                )}
+                <div style={{ overflow: 'hidden', flex: 1 }}>
+                  <div 
+                    style={{ 
+                      fontSize: '13px', 
+                      fontWeight: 600, 
+                      color: '#1e293b', 
+                      whiteSpace: 'nowrap', 
+                      overflow: 'hidden', 
+                      textOverflow: 'ellipsis' 
+                    }} 
+                    title={fileName}
+                  >
+                    {fileName}
+                  </div>
+                  <div style={{ fontSize: '11px', color: isDownloading ? '#2563eb' : isDownloaded ? '#059669' : 'var(--text-muted)', marginTop: '2px', fontWeight: isDownloading ? 600 : 400 }}>
+                    {isDownloading ? 'Downloading file...' : isDownloaded ? 'Downloaded!' : isPdf ? 'PDF Document' : isImg ? 'Image File' : 'Attachment'}
+                  </div>
+                </div>
               </div>
-              <a
-                href={fullUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-sm btn-secondary"
-                style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', textDecoration: 'none' }}
+
+              <button
+                type="button"
+                className={`btn ${isDownloaded ? 'btn-success' : 'btn-primary'} btn-sm`}
+                style={{ 
+                  padding: '6px 12px', 
+                  fontSize: '12px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  cursor: isDownloading ? 'wait' : 'pointer',
+                  backgroundColor: isDownloading ? '#93c5fd' : isDownloaded ? '#10b981' : undefined,
+                  borderColor: isDownloading ? '#93c5fd' : isDownloaded ? '#10b981' : undefined,
+                  color: 'white'
+                }}
+                disabled={isDownloading}
+                onClick={() => handleDownload(rawUrl, fileName, i)}
+                title={isDownloading ? `Downloading ${fileName}...` : `Download ${fileName}`}
               >
-                <ExternalLink size={12} /> Open File
-              </a>
+                {isDownloading ? (
+                  <>
+                    <Loader2 size={14} className="spin" style={{ animation: 'spin 1s linear infinite' }} />
+                    <span>Downloading...</span>
+                  </>
+                ) : isDownloaded ? (
+                  <>
+                    <CheckCircle2 size={14} />
+                    <span>Downloaded</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={14} />
+                    <span>Download</span>
+                  </>
+                )}
+              </button>
             </div>
           )
         })}
       </div>
 
-      {/* Lightbox / Modal Viewer */}
-      {activePreview && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.85)',
-            zIndex: 9999,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px',
-            backdropFilter: 'blur(4px)'
-          }}
-          onClick={() => setActivePreview(null)}
-        >
-          <div
-            style={{
-              position: 'relative',
-              width: '100%',
-              maxWidth: activePreview.type === 'pdf' ? '900px' : '850px',
-              maxHeight: '90vh',
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)'
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ padding: '14px 20px', background: '#0f172a', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                {activePreview.type === 'pdf' ? <FileText size={18} color="#ef4444" /> : <ImageIcon size={18} color="#3b82f6" />}
-                <span style={{ fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {activePreview.name}
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <a
-                  href={activePreview.url}
-                  download={activePreview.name}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
-                >
-                  <Download size={14} /> Download
-                </a>
-                <button
-                  onClick={() => setActivePreview(null)}
-                  style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', width: '30px', height: '30px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            <div style={{ flex: 1, padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', overflow: 'auto', minHeight: '400px' }}>
-              {activePreview.type === 'pdf' ? (
-                <iframe
-                  src={activePreview.url}
-                  title={activePreview.name}
-                  style={{ width: '100%', height: '70vh', border: 'none', borderRadius: '8px' }}
-                />
-              ) : (
-                <img
-                  src={activePreview.url}
-                  alt={activePreview.name}
-                  style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }

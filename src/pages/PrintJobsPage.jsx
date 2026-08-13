@@ -60,6 +60,7 @@ function JobForm({ job, company, initialCategory, onBack, onSuccess }) {
     premium: job?.premium || 0,
     notes: job?.notes || '',
     status: job?.status || 'Pending',
+    design_file_url: job?.design_file_url || '',
     is_custom_price: false,
     custom_total: ''
   })
@@ -157,7 +158,7 @@ function JobForm({ job, company, initialCategory, onBack, onSuccess }) {
       category: activeCat,
       company_id: company.id,
       total_price: total,
-      balance: job ? (job.balance || 0) : total,
+      balance: job?.id ? (job.balance ?? 0) : total,
       quantity: parseInt(form.quantity) || 1,
       unit_price: parseFloat(form.unit_price) || 0,
       width: parseFloat(form.width) || null,
@@ -553,6 +554,7 @@ export default function PrintJobsPage() {
         customer_id: conversion.customer_id,
         notes: noteParts.join('\n'),
         status: 'Pending',
+        design_file_url: conversion.images ? conversion.images.join(',') : '',
         _sourceJobListId: conversion.source_job_list_id
       })
       setShowForm(true)
@@ -599,7 +601,27 @@ export default function PrintJobsPage() {
       // 2. Delete associated notifications if any
       await supabase.from('notifications').delete().eq('job_id', id)
       
-      // 3. Delete from print_jobs
+      // 3. Delete associated files if any
+      const files = targetJob?.design_file_url ? targetJob.design_file_url.split(',') : []
+      if (files.length > 0) {
+        const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost/printdesk' : ''
+        for (const url of files) {
+          const match = url.match(/\/uploads\/joblist\/(.+)$/)
+          if (match && match[1]) {
+            try {
+              await fetch(`${API_BASE}/api/upload.php`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: match[1] })
+              })
+            } catch (e) {
+              console.error('Delete image error:', e)
+            }
+          }
+        }
+      }
+      
+      // 4. Delete from print_jobs
       const { error } = await supabase.from('print_jobs').delete().eq('id', id)
       
       if (error) {

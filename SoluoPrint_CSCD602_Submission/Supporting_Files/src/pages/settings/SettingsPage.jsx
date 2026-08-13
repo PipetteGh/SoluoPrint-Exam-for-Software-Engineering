@@ -1,4 +1,4 @@
-import { useNavigate } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Building2, Users, Shield, CreditCard, Settings, Lock, MessageSquare, Database, ShieldCheck } from 'lucide-react'
 import SEO from '../../components/ui/SEO'
 

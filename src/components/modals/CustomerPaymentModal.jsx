@@ -6,7 +6,7 @@ import Preloader from '../ui/Preloader'
 
 export default function CustomerPaymentModal({ onClose, onSuccess, customer, balance, job }) {
   const [amount, setAmount] = useState(job ? job.balance : (balance || 0))
-  const [gateways, setGateways] = useState({ paystack: false, hubtel: false, flutterwave: false })
+  const [gateways, setGateways] = useState({ paystack: false, paystackKey: '', hubtel: false, flutterwave: false })
   const [selectedMethod, setSelectedMethod] = useState('')
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
@@ -30,6 +30,7 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
       if (!error && data) {
         setGateways({
           paystack: data.paystack_active,
+          paystackKey: data.paystack_public_key,
           hubtel: data.hubtel_active,
           flutterwave: data.flutterwave_active
         })
@@ -57,82 +58,121 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
 
     setProcessing(true)
 
-    // Simulate payment delay
-    await new Promise(r => setTimeout(r, 2000))
-
-    try {
-      // 1. We need to find a payment account to credit this to. Let's just pick the first active one, or create a 'Portal Payments' one if needed.
-      // But for simplicity, let's find the first one.
-      const { data: accounts } = await supabase
-        .from('payment_accounts')
-        .select('id')
-        .eq('company_id', customer.company_id)
-        .eq('is_active', true)
-        .limit(1)
-
-      const accountId = accounts && accounts.length > 0 ? accounts[0].id : null
-
-      // 2. Insert Payment Record
-      const { data: newPayment, error: payErr } = await supabase
-        .from('payments')
-        .insert({
-          company_id: customer.company_id,
-          customer_id: customer.id,
-          job_id: job ? job.id : null,
-          payment_account_id: accountId,
-          amount: parseFloat(amount),
-          payment_method: selectedMethod,
-          notes: `Paid via Customer Portal (${selectedMethod})`
-        })
-        .select()
-        .single()
-
-      if (payErr) throw payErr
-
-      // 3. Update Customer Balance
-      const newCustomerBalance = Number(customer.balance) - parseFloat(amount)
-      await supabase
-        .from('customers')
-        .update({ balance: newCustomerBalance })
-        .eq('id', customer.id)
-        
-      // 3.5 Update Job Balance if applicable
-      if (job) {
-        const newJobBalance = Number(job.balance) - parseFloat(amount)
-        const newJobAmountPaid = Number(job.amount_paid || 0) + parseFloat(amount)
-        const jobStatus = newJobBalance <= 0 ? (job.status === 'Pending' ? 'In Progress' : job.status) : job.status
-        
-        await supabase
-          .from('print_jobs')
-          .update({ balance: newJobBalance, amount_paid: newJobAmountPaid, status: jobStatus })
-          .eq('id', job.id)
-      }
-
-      // 4. Send Confirmation Notification to Admin
-      await supabase.from('notifications').insert({
-        company_id: customer.company_id,
-        title: 'Payment Received (Portal)',
-        message: `${customer.name} just paid ${currency}${amount} via ${selectedMethod}${job ? ` for Job #${job.job_number}` : ''}.`,
-        type: 'payment_received'
-      })
-
-      // 5. Optionally trigger the SMS / Email via the backend...
+    const processBackendPayment = async (reference) => {
       try {
-        const { notifyCustomer } = await import('../../lib/sms')
-        const msg = job 
-          ? `your payment of ${currency} ${amount} for job ${job.job_number} via ${selectedMethod} has been received.` 
-          : `your payment of ${currency} ${amount} via ${selectedMethod} has been received. Your remaining balance is ${currency} ${newCustomerBalance.toFixed(2)}.`
-        await notifyCustomer(customer.company_id, customer.id, 'payment_received', msg)
-      } catch (e) {
-        console.error('Failed to send sms', e)
+        const { data: accounts } = await supabase
+          .from('payment_accounts')
+          .select('id')
+          .eq('company_id', customer.company_id)
+          .eq('is_active', true)
+          .limit(1)
+
+        const accountId = accounts && accounts.length > 0 ? accounts[0].id : null
+
+        const { data: newPayment, error: payErr } = await supabase
+          .from('payments')
+          .insert({
+            company_id: customer.company_id,
+            customer_id: customer.id,
+            job_id: job ? job.id : null,
+            payment_account_id: accountId,
+            amount: parseFloat(amount),
+            payment_method: selectedMethod,
+            notes: `Paid via Customer Portal (${selectedMethod})${reference ? ` Ref: ${reference}` : ''}`
+          })
+          .select()
+          .single()
+
+        if (payErr) throw payErr
+
+        const newCustomerBalance = Number(customer.balance) - parseFloat(amount)
+        await supabase
+          .from('customers')
+          .update({ balance: newCustomerBalance })
+          .eq('id', customer.id)
+          
+        if (job) {
+          const newJobBalance = Number(job.balance) - parseFloat(amount)
+          const newJobAmountPaid = Number(job.amount_paid || 0) + parseFloat(amount)
+          const jobStatus = newJobBalance <= 0 ? (job.status === 'Pending' ? 'In Progress' : job.status) : job.status
+          
+          await supabase
+            .from('print_jobs')
+            .update({ balance: newJobBalance, amount_paid: newJobAmountPaid, status: jobStatus })
+            .eq('id', job.id)
+        }
+
+        await supabase.from('notifications').insert({
+          company_id: customer.company_id,
+          title: 'Payment Received (Portal)',
+          message: `${customer.name} just paid ${currency}${amount} via ${selectedMethod}${job ? ` for Job #${job.job_number}` : ''}.`,
+          type: 'payment_received'
+        })
+
+        try {
+          const { notifyCustomer } = await import('../../lib/sms')
+          const safeCurrency = currency === '¢' || currency === 'GH¢' ? 'GHS' : currency
+          const msg = job 
+            ? `your payment of ${safeCurrency} ${amount} for job ${job.job_number} has been received by ${customer?.companies?.name || 'us'}. Your remaining balance is ${safeCurrency} ${newCustomerBalance.toFixed(2)}.` 
+            : `your payment of ${safeCurrency} ${amount} has been received by ${customer?.companies?.name || 'us'}. Your remaining balance is ${safeCurrency} ${newCustomerBalance.toFixed(2)}.`
+          await notifyCustomer(customer.company_id, customer.id, 'payment_received', msg)
+        } catch (e) {
+          console.error('Failed to send sms', e)
+        }
+
+        showToast('Payment successful!', 'success')
+        if (onSuccess) onSuccess(newPayment)
+      } catch (err) {
+        showToast(err.message || 'Payment failed.', 'error')
+      } finally {
+        setProcessing(false)
+      }
+    }
+
+    if (selectedMethod === 'Paystack') {
+      if (!gateways.paystackKey) {
+        showToast('Paystack is not fully configured by the shop.', 'error')
+        setProcessing(false)
+        return
       }
 
-      showToast('Payment successful!', 'success')
-      if (onSuccess) onSuccess(newPayment)
-    } catch (err) {
-      showToast(err.message || 'Payment failed.', 'error')
-    } finally {
-      setProcessing(false)
+      // Dynamically load Paystack script if not present
+      if (!window.PaystackPop) {
+        const script = document.createElement('script')
+        script.src = 'https://js.paystack.co/v1/inline.js'
+        script.onload = () => {
+          triggerPaystack()
+        }
+        script.onerror = () => {
+          showToast('Failed to load Paystack payment gateway', 'error')
+          setProcessing(false)
+        }
+        document.body.appendChild(script)
+      } else {
+        triggerPaystack()
+      }
+
+      function triggerPaystack() {
+        const handler = window.PaystackPop.setup({
+          key: gateways.paystackKey,
+          email: customer.email || 'customer@soluoprint.com',
+          amount: Math.round(parseFloat(amount) * 100), // convert to smallest currency unit (pesewas/cents)
+          currency: customer?.companies?.currency || 'GHS',
+          ref: 'SP_' + Math.floor((Math.random() * 1000000000) + 1),
+          callback: function(response) {
+            processBackendPayment(response.reference)
+          },
+          onClose: function() {
+            setProcessing(false)
+            showToast('Payment was cancelled', 'info')
+          }
+        })
+        handler.openIframe()
+      }
+    } else {
+      // Handle other methods (simulate for now if not implemented)
+      await new Promise(r => setTimeout(r, 2000))
+      processBackendPayment()
     }
   }
 

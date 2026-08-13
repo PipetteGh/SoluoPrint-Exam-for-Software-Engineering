@@ -21,6 +21,7 @@ function EditCustomerModal({ customer, company, onClose, onSuccess }) {
     is_active: customer.is_active !== false
   })
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [showPortalModal, setShowPortalModal] = useState(false)
   const toast = useToast()
   const { confirm } = useConfirm()
@@ -129,22 +130,31 @@ export default function CustomersPage() {
   useEffect(() => { if (company) load() }, [company])
 
   async function load() {
-    await syncAllCompanyCustomerBalances(company.id)
-    const { data } = await supabase
-      .from('customers')
-      .select('*,customer_types(name)')
-      .eq('company_id', company.id)
-      .order('created_at', { ascending: false })
-    const all = data || []
-    setCustomers(all)
-    setStats({
-      total: all.length,
-      active: all.filter(c => c.is_active).length,
-      owed: all.reduce((s, c) => s + (c.balance || 0), 0),
-      credit: all.reduce((s, c) => s + (c.credit_balance || 0), 0)
-    })
-    setSelectedIds([])
-    setLoading(false)
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*,customer_types(name)')
+        .eq('company_id', company.id)
+        .order('created_at', { ascending: false })
+      
+      if (error) console.error('Error fetching customers:', error)
+      const all = data || []
+      setCustomers(all)
+      setStats({
+        total: all.length,
+        active: all.filter(c => c.is_active).length,
+        owed: all.reduce((s, c) => s + (c.balance || 0), 0),
+        credit: all.reduce((s, c) => s + (c.credit_balance || 0), 0)
+      })
+      setSelectedIds([])
+      // Non-blocking background sync of customer balances
+      syncAllCompanyCustomerBalances(company.id).catch(console.error)
+    } catch (err) {
+      console.error('Customer load exception:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function deleteCustomer(id) {
@@ -180,6 +190,49 @@ export default function CustomersPage() {
     } else {
       toast.success(`${selectedIds.length} customers deleted`)
       load()
+    }
+  }
+
+  async function sendCredentials(customer, username, password) {
+    const loginUrl = window.location.origin + '/login'
+    
+    // Send SMS
+    if (customer.phone) {
+      try {
+        const { notifyCustomer } = await import('../lib/sms')
+        const content = `Welcome to our print shop! We are excited to have you. Contact us for all your printing needs. Login to your portal at ${loginUrl} to upload artworks, view job statistics and other things. User: ${username} | Pass: ${password}`
+        await notifyCustomer(company?.id, customer.id, 'welcome', content)
+      } catch (e) {
+        console.error('Failed to send welcome sms', e)
+      }
+    }
+    
+    // Send Email
+    if (customer.email) {
+      try {
+        const { sendEmail } = await import('../lib/email')
+        await sendEmail(
+           customer.email, 
+           'Your Customer Portal Credentials', 
+           `<p>Welcome to ${company?.name || 'SoluoPrint'}!</p><p>You can track your print jobs and bills in our customer portal.</p><p>Login at: <a href="${loginUrl}">${loginUrl}</a></p><p>Username: <b>${username}</b></p><p>Password: <b>${password}</b></p>`,
+           company?.name || 'SoluoPrint'
+        )
+      } catch (e) {
+        console.error('Failed to send welcome email', e)
+      }
+    }
+    
+    // Create In-App Notification
+    try {
+      await supabase.from('notifications').insert({
+        company_id: company?.id,
+        title: 'Credentials Generated',
+        message: `Portal credentials generated for ${customer.name}.`,
+        type: 'system',
+        read: false
+      })
+    } catch (e) {
+      console.error('Failed to insert notification', e)
     }
   }
 
@@ -226,6 +279,7 @@ export default function CustomersPage() {
           
         if (!error) {
           generatedCount++
+          await sendCredentials(cust, newUsername, newPassword)
         } else {
           failedCount++
         }
@@ -488,6 +542,7 @@ export default function CustomersPage() {
                         if (!error) {
                           toast.success('Credentials generated!')
                           setViewCredentials({ ...viewCredentials, username: newUsername, password: newPassword })
+                          await sendCredentials(viewCredentials, newUsername, newPassword)
                           load() // Refresh table
                         } else {
                           toast.error('Failed to generate credentials')

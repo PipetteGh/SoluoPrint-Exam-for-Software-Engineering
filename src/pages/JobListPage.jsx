@@ -107,6 +107,7 @@ export default function JobListPage() {
       services: item.services,
       description: item.description,
       notes: item.notes,
+      images: item.images,
       source_job_list_id: item.id
     }
     sessionStorage.setItem('jobListConversion', JSON.stringify(conversionData))

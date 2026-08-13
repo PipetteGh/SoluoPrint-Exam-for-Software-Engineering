@@ -119,7 +119,7 @@ export default function NewPaymentModal({ onClose, onSuccess, preSelectedCustome
           // General payment: remaining = customer overall balance - payment amount
           remainingBalance = Math.max(0, (customer?.balance || 0) - amount)
         }
-        const msg = `your payment of: ${currencyCode} ${amount.toFixed(2)} via ${form.payment_method || 'Cash'} has been received. Your remaining balance is ${currencyCode} ${remainingBalance.toFixed(2)}.`
+        const msg = `your payment of ${currencyCode} ${amount.toFixed(2)} has been received by ${company?.name || 'us'}. Your remaining balance is ${currencyCode} ${remainingBalance.toFixed(2)}.`
         import('../../lib/sms').then(({ notifyCustomer }) => {
           notifyCustomer(company.id, form.customer_id, 'payment_received', msg)
         })

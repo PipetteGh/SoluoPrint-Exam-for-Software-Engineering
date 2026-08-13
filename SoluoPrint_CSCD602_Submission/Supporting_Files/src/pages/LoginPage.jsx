@@ -33,9 +33,10 @@ export default function LoginPage() {
 
       await finalizeCustomSignIn(profile.id)
       
-      // Log Audit Activity
-      import('../lib/auditLogger').then(({ logAudit }) => {
-        logAudit({
+      // Log Audit Activity — AWAIT before navigating so the insert completes
+      try {
+        const { logAudit } = await import('../lib/auditLogger')
+        await logAudit({
           companyId: profile.company_id,
           userId: profile.id,
           actorName: profile.full_name || email,
@@ -43,7 +44,9 @@ export default function LoginPage() {
           action: 'ADMIN_LOGIN',
           details: `User ${profile.full_name || email} logged in successfully.`
         })
-      })
+      } catch (auditErr) {
+        console.warn('Audit log warning:', auditErr)
+      }
 
       setLoading(false)
       navigate('/dashboard')

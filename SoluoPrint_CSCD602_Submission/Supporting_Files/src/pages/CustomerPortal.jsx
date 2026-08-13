@@ -1,6 +1,11 @@
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { recalculateCustomerBalance } from '../lib/balanceUtils'
-import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight, LayoutDashboard, User, HelpCircle, ClipboardList } from 'lucide-react'
+import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight, LayoutDashboard, User, HelpCircle, ClipboardList, Edit, Trash2 } from 'lucide-react'
+import { useConfirm } from '../contexts/ConfirmContext'
+import { useToast } from '../contexts/ToastContext'
+import { logAudit } from '../lib/auditLogger'
 import SEO from '../components/ui/SEO'
 import ExportToolbar from '../components/ui/ExportToolbar'
 import FileGallery from '../components/ui/FileGallery'
@@ -43,6 +48,14 @@ function formatDateTime(dateStr) {
   })
 }
 
+function formatMoney(val) {
+  const num = Math.max(0, Number(val) || 0)
+  if (num % 1 === 0) {
+    return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  }
+  return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 export default function CustomerPortal() {
   const [customer, setCustomer] = useState(null)
   const [jobs, setJobs] = useState([])
@@ -58,12 +71,22 @@ export default function CustomerPortal() {
   const [gatewaysActive, setGatewaysActive] = useState(false)
   const [selectedJobToPay, setSelectedJobToPay] = useState(null)
   const [selectedJobForReceipt, setSelectedJobForReceipt] = useState(null)
+  const [editingStagedJob, setEditingStagedJob] = useState(null)
   const [runTour, setRunTour] = useState(false)
+  const { confirm } = useConfirm()
+  const { showToast } = useToast()
   
-  // Pagination & Search state
+  // Pagination & Search state for Print Jobs
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const jobsPerPage = 10
+
+  // Pagination & Search state for Uploaded Jobs (Staged)
+  const [stagedSearch, setStagedSearch] = useState('')
+  const [stagedStatusFilter, setStagedStatusFilter] = useState('All')
+  const [stagedPage, setStagedPage] = useState(1)
+  const [stagedPerPage, setStagedPerPage] = useState(10)
+
   const reportRef = useRef(null)
 
   const exportColumns = [
@@ -115,70 +138,124 @@ export default function CustomerPortal() {
   async function loadData() {
     const custId = localStorage.getItem('soluoprint_customer_id')
     if (!custId) {
+      setLoading(false)
       navigate('/customer-login')
       return
     }
 
-    // Recalculate customer balance with 100% financial integrity before loading
-    await recalculateCustomerBalance(custId)
+    try {
+      // Recalculate customer balance silently (non-blocking)
+      recalculateCustomerBalance(custId).catch(e => console.warn('Balance recalculate warn:', e))
 
-    const { data: cust, error: custErr } = await supabase
-      .from('customers')
-      .select('*, companies(name, currency_symbol)')
-      .eq('id', custId)
-      .single()
+      const { data: cust, error: custErr } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', custId)
+        .single()
+        
+      if (custErr || !cust) {
+        console.warn('Customer fetch failed:', custErr?.message)
+        localStorage.removeItem('soluoprint_customer_id')
+        setLoading(false)
+        navigate('/customer-login')
+        return
+      }
+
+      if (cust.company_id) {
+        const { data: comp } = await supabase
+          .from('companies')
+          .select('name, currency_symbol')
+          .eq('id', cust.company_id)
+          .maybeSingle()
+        if (comp) cust.companies = comp
+      }
+
+      setCustomer(cust)
+
+      // Check payment gateways
+      const { data: gatewayData } = await supabase
+        .from('payment_gateways')
+        .select('*')
+        .eq('company_id', cust.company_id)
+        .single()
+        
+      if (gatewayData && (gatewayData.paystack_active || gatewayData.hubtel_active || gatewayData.flutterwave_active)) {
+        setGatewaysActive(true)
+      }
+
+      // Fetch print jobs
+      const { data: jobData } = await supabase
+        .from('print_jobs')
+        .select('*')
+        .eq('customer_id', custId)
+        .order('created_at', { ascending: false })
       
-    if (custErr || !cust) {
-      navigate('/customer-login')
-      return
+      setJobs(jobData || [])
+
+      // Fetch staged jobs from job_list (uploaded jobs pending shop conversion)
+      const { data: stagedData } = await supabase
+        .from('job_list')
+        .select('*')
+        .eq('customer_id', custId)
+        .order('created_at', { ascending: false })
+
+      setStagedJobs(stagedData || [])
+
+      // Fetch payments and calculate total amount
+      const { data: paymentsData } = await supabase
+        .from('payments')
+        .select('amount,payment_date,payment_method')
+        .eq('customer_id', custId)
+
+      setPayments(paymentsData || [])
+      const totalPaid = (paymentsData || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+      setTotalPayments(totalPaid)
+    } catch (err) {
+      console.error('Customer portal load error:', err)
+    } finally {
+      setLoading(false)
     }
-    setCustomer(cust)
-
-    // Check payment gateways
-    const { data: gatewayData } = await supabase
-      .from('payment_gateways')
-      .select('*')
-      .eq('company_id', cust.company_id)
-      .single()
-      
-    if (gatewayData && (gatewayData.paystack_active || gatewayData.hubtel_active || gatewayData.flutterwave_active)) {
-      setGatewaysActive(true)
-    }
-
-    // Fetch print jobs
-    const { data: jobData } = await supabase
-      .from('print_jobs')
-      .select('*')
-      .eq('customer_id', custId)
-      .order('created_at', { ascending: false })
-    
-    setJobs(jobData || [])
-
-    // Fetch staged jobs from job_list (uploaded jobs pending shop conversion)
-    const { data: stagedData } = await supabase
-      .from('job_list')
-      .select('*')
-      .eq('customer_id', custId)
-      .order('created_at', { ascending: false })
-
-    setStagedJobs(stagedData || [])
-
-    // Fetch payments and calculate total amount
-    const { data: paymentsData } = await supabase
-      .from('payments')
-      .select('amount,payment_date,payment_method')
-      .eq('customer_id', custId)
-
-    setPayments(paymentsData || [])
-    const totalPaid = (paymentsData || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
-    setTotalPayments(totalPaid)
-
-    setLoading(false)
   }
 
   function handleLogout() {
     localStorage.removeItem('soluoprint_customer_id')
     navigate('/customer-login')
+  }
+
+  async function handleDeleteStagedJob(item) {
+    const isConfirmed = await confirm({
+      title: 'Delete Uploaded Job',
+      message: `Are you sure you want to delete this job upload (${item.description || 'Custom Upload'})? This action cannot be undone.`,
+      confirmText: 'Yes, Delete Job',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
+
+    try {
+      const { error } = await supabase
+        .from('job_list')
+        .delete()
+        .eq('id', item.id)
+
+      if (error) throw error
+
+      showToast('Uploaded job deleted successfully.', 'success')
+
+      await logAudit({
+        companyId: customer?.company_id,
+        userId: customer?.id,
+        actorName: customer?.name || 'Customer',
+        actorRole: 'Customer',
+        action: 'DELETE_JOB_UPLOAD',
+        details: `Deleted staged job upload (${item.description})`
+      })
+
+      await loadData()
+    } catch (err) {
+      console.error('Delete job upload error:', err)
+      showToast(err.message || 'Failed to delete uploaded job.', 'error')
+    }
   }
 
   // ---- ALL hooks BEFORE any conditional returns ----
@@ -286,7 +363,7 @@ export default function CustomerPortal() {
   }, [jobs])
 
   // ---- NOW the loading guard ----
-  if (loading) return <Preloader fullScreen />
+  if (loading || !customer) return <Preloader fullScreen />
 
   // Render different tabs
   const renderContent = () => {
@@ -294,14 +371,14 @@ export default function CustomerPortal() {
       return (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
-            <h1 style={{ fontSize: '28px', margin: 0 }}>Welcome back, {customer.name.split(' ')[0]}!</h1>
+            <h1 style={{ fontSize: '28px', margin: 0 }}>Welcome back, {customer?.name?.split(' ')[0] || 'Customer'}!</h1>
             
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               <ExportToolbar 
                 tableData={exportTableData} 
                 columns={exportColumns} 
-                fileName={`Customer_Portal_Report_${customer.name.replace(/\s+/g, '_')}`}
-                title={`${customer.companies?.name || 'SoluoPrint'} - ${customer.name}'s Portal Summary`}
+                fileName={`Customer_Portal_Report_${(customer?.name || 'Customer').replace(/\s+/g, '_')}`}
+                title={`${customer?.companies?.name || 'SoluoPrint'} - ${customer?.name || 'Customer'}'s Portal Summary`}
                 currency={currency}
                 reportRef={reportRef}
               />
@@ -315,18 +392,20 @@ export default function CustomerPortal() {
           
           {/* Stat Cards - matching admin dashboard spacing */}
           <div className="stat-grid" style={{ marginBottom: '32px' }}>
-            <div className="stat-card" style={{ position: 'relative' }}>
-              <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)' }}><CreditCard size={22} color="#ef4444" /></div>
-              <div className="stat-info">
-                <div className="stat-label">Outstanding Balance</div>
-                <div className="stat-value" style={{ color: Number(customer?.balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
-                  {currency} {Math.max(0, Number(customer?.balance || 0)).toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+            <div className="stat-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1', minWidth: '160px' }}>
+                <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)' }}><CreditCard size={22} color="#ef4444" /></div>
+                <div className="stat-info">
+                  <div className="stat-label">Outstanding Balance</div>
+                  <div className="stat-value" style={{ color: Number(customer?.balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
+                    {currency} {formatMoney(customer?.balance)}
+                  </div>
                 </div>
               </div>
               {Number(customer.balance) > 0 && gatewaysActive && (
                 <button 
                   className="btn btn-primary btn-sm" 
-                  style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)' }}
+                  style={{ flexShrink: 0 }}
                   onClick={() => setShowPaymentModal(true)}
                 >
                   Pay Now
@@ -354,13 +433,13 @@ export default function CustomerPortal() {
               <div className="stat-icon" style={{ background: 'rgba(99, 102, 241, 0.1)' }}><Receipt size={22} color="#6366f1" /></div>
               <div className="stat-info">
                 <div className="stat-label">Total Payments</div>
-                <div className="stat-value">{currency} {Number(totalPayments).toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                <div className="stat-value">{currency} {formatMoney(totalPayments)}</div>
               </div>
             </div>
           </div>
 
           {/* Charts Row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '32px' }}>
             <div className="card">
               <div className="card-header"><div className="card-title">Monthly Spending ({new Date().getFullYear()})</div></div>
               <div className="card-body" style={{ height: '300px' }}>
@@ -401,7 +480,7 @@ export default function CustomerPortal() {
           </div>
 
           {/* Second Charts Row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '32px' }}>
             <div className="card">
               <div className="card-header"><div className="card-title">Job Status Distribution</div></div>
               <div className="card-body" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '280px' }}>
@@ -690,43 +769,140 @@ export default function CustomerPortal() {
     }
 
     if (activeTab === 'staged') {
+      // Filter staged jobs by search and status
+      const filteredStaged = stagedJobs.filter(item => {
+        const matchesSearch = !stagedSearch.trim() || 
+          (item.description || '').toLowerCase().includes(stagedSearch.toLowerCase()) ||
+          (item.notes || '').toLowerCase().includes(stagedSearch.toLowerCase()) ||
+          new Date(item.created_at).toLocaleDateString().includes(stagedSearch)
+        
+        const matchesStatus = stagedStatusFilter === 'All' ||
+          (stagedStatusFilter === 'Pending' && item.status !== 'Converted') ||
+          (stagedStatusFilter === 'Converted' && item.status === 'Converted')
+
+        return matchesSearch && matchesStatus
+      })
+
+      const totalStagedPages = Math.max(1, Math.ceil(filteredStaged.length / stagedPerPage))
+      const safeStagedPage = Math.min(stagedPage, totalStagedPages)
+      const startIdx = (safeStagedPage - 1) * stagedPerPage
+      const paginatedStaged = filteredStaged.slice(startIdx, startIdx + stagedPerPage)
+
       return (
         <>
           <div className="page-header">
             <div>
-              <h1 className="page-title">Job List (Staged Uploads)</h1>
-              <div className="page-subtitle">Your uploaded jobs waiting for shop review & pricing</div>
+              <h1 className="page-title">Job List (Uploaded Jobs)</h1>
+              <div className="page-subtitle">Your uploaded artwork & design files pending shop review</div>
             </div>
             <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
               <Plus size={16} /> Upload New Job
             </button>
           </div>
 
-          <div style={{ display: 'grid', gap: '20px' }}>
-            {stagedJobs.length === 0 ? (
+          {/* Search, Filter & Per Page Toolbar */}
+          <div className="card" style={{ padding: '16px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1, minWidth: '280px' }}>
+                <div style={{ position: 'relative', width: '100%', maxWidth: '420px', minWidth: '200px' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', zIndex: 2 }} />
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    placeholder="Search by job description, notes, or date..." 
+                    value={stagedSearch}
+                    onChange={e => { setStagedSearch(e.target.value); setStagedPage(1) }}
+                    style={{ width: '100%', paddingLeft: '38px', fontSize: '13px' }}
+                  />
+                </div>
+                <select 
+                  className="form-control" 
+                  style={{ width: '180px', minWidth: '150px', fontSize: '13px' }}
+                  value={stagedStatusFilter}
+                  onChange={e => { setStagedStatusFilter(e.target.value); setStagedPage(1) }}
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Pending">Pending Review</option>
+                  <option value="Converted">Converted Jobs</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>
+                <span>Show:</span>
+                <select 
+                  className="form-control" 
+                  style={{ width: '75px', padding: '4px 8px', fontSize: '13px' }}
+                  value={stagedPerPage}
+                  onChange={e => { setStagedPerPage(Number(e.target.value)); setStagedPage(1) }}
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Uploaded Jobs Cards View with FileGallery */}
+          <div style={{ display: 'grid', gap: '16px' }}>
+            {filteredStaged.length === 0 ? (
               <div className="card" style={{ padding: '60px 40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <ClipboardList size={48} style={{ opacity: 0.2, margin: '0 auto 16px' }} />
-                <h3>No staged jobs uploaded yet</h3>
-                <p style={{ fontSize: '13px' }}>Upload your design files or artwork and the shop will review and convert them into print jobs.</p>
-                <button className="btn btn-primary" onClick={() => setShowUploadModal(true)} style={{ marginTop: '12px' }}>
-                  <Plus size={16} /> Upload Your First Job
-                </button>
+                <h3>{stagedJobs.length === 0 ? 'No uploaded jobs yet' : 'No matching jobs found'}</h3>
+                <p style={{ fontSize: '13px' }}>
+                  {stagedJobs.length === 0 
+                    ? 'Upload your design files or artwork and the shop will review and convert them into print jobs.' 
+                    : 'Try clearing your search term or filter parameters.'}
+                </p>
+                {stagedJobs.length === 0 && (
+                  <button className="btn btn-primary" onClick={() => setShowUploadModal(true)} style={{ marginTop: '12px' }}>
+                    <Plus size={16} /> Upload Your First Job
+                  </button>
+                )}
               </div>
             ) : (
-              stagedJobs.map(item => (
+              paginatedStaged.map((item, idx) => (
                 <div key={item.id} className="card" style={{ padding: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: '16px', color: '#1e293b' }}>
-                        {item.description || 'Custom Print Upload'}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary)', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: '12px' }}>
+                          #{startIdx + idx + 1}
+                        </span>
+                        <span style={{ fontWeight: 700, fontSize: '16px', color: '#1e293b' }}>
+                          {item.description || 'Custom Print Upload'}
+                        </span>
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
                         Uploaded on {new Date(item.created_at).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(item.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
-                    <span className={`status-badge status-${item.status?.toLowerCase() === 'converted' ? 'completed' : 'pending'}`}>
-                      {item.status === 'Converted' ? 'Converted to Print Job' : 'Pending Shop Review'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className={`status-badge status-${item.status?.toLowerCase() === 'converted' ? 'completed' : 'pending'}`}>
+                        {item.status === 'Converted' ? 'Converted to Print Job' : 'Pending Shop Review'}
+                      </span>
+                      {item.status !== 'Converted' && (
+                        <div style={{ display: 'flex', gap: '6px', marginLeft: '6px' }}>
+                          <button 
+                            className="btn btn-secondary btn-sm" 
+                            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', fontSize: '12px' }}
+                            onClick={() => setEditingStagedJob(item)}
+                            title="Edit instructions or artwork files"
+                          >
+                            <Edit size={13} /> Edit
+                          </button>
+                          <button 
+                            className="btn btn-danger btn-sm" 
+                            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', fontSize: '12px', background: '#fee2e2', color: '#ef4444', border: '1px solid #fca5a5' }}
+                            onClick={() => handleDeleteStagedJob(item)}
+                            title="Delete uploaded job"
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {item.notes && (
@@ -742,6 +918,34 @@ export default function CustomerPortal() {
               ))
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {filteredStaged.length > 0 && (
+            <div className="card" style={{ marginTop: '20px', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Showing <strong>{startIdx + 1}</strong> to <strong>{Math.min(startIdx + stagedPerPage, filteredStaged.length)}</strong> of <strong>{filteredStaged.length}</strong> uploaded jobs
+              </div>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setStagedPage(p => Math.max(1, p - 1))}
+                  disabled={safeStagedPage === 1}
+                >
+                  <ChevronLeft size={16} /> Prev
+                </button>
+                <span style={{ fontSize: '13px', fontWeight: 600, padding: '0 8px' }}>
+                  Page {safeStagedPage} of {totalStagedPages}
+                </span>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setStagedPage(p => Math.min(totalStagedPages, p + 1))}
+                  disabled={safeStagedPage === totalStagedPages}
+                >
+                  Next <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )
     }
@@ -791,9 +995,9 @@ export default function CustomerPortal() {
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo" style={{ cursor: 'default' }}>
-            <div className="sidebar-logo-icon">{(customer.companies?.name || 'S')[0].toUpperCase()}</div>
+            <div className="sidebar-logo-icon">{(customer?.companies?.name || 'SoluoPrint')[0].toUpperCase()}</div>
             <span className="sidebar-logo-text" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
-              {customer.companies?.name || 'SoluoPrint'}
+              {customer?.companies?.name || 'SoluoPrint'}
             </span>
           </div>
         </div>
@@ -811,7 +1015,7 @@ export default function CustomerPortal() {
             onClick={() => { setActiveTab('staged'); setSidebarOpen(false) }}
           >
             <ClipboardList />
-            <span>Job List (Staged)</span>
+            <span>Job List (Uploaded)</span>
             {stagedJobs.filter(j => j.status === 'Pending').length > 0 && (
               <span style={{ marginLeft: 'auto', background: '#2563eb', color: 'white', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '10px' }}>
                 {stagedJobs.filter(j => j.status === 'Pending').length}
@@ -861,7 +1065,7 @@ export default function CustomerPortal() {
             >
               <HelpCircle size={16} /> Portal Guide
             </button>
-            <span style={{ fontWeight: 500 }}>{customer.name}</span>
+            <span style={{ fontWeight: 500 }}>{customer?.name || 'Customer'}</span>
             <button onClick={handleLogout} className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <LogOut size={14} /> Logout
             </button>
@@ -880,7 +1084,7 @@ export default function CustomerPortal() {
           onSuccess={() => {
             setShowUploadModal(false)
             loadData()
-            setActiveTab('jobs')
+            setActiveTab('staged')
           }}
         />
       )}
@@ -888,7 +1092,7 @@ export default function CustomerPortal() {
       {selectedJobForReceipt && (
         <ReceiptModal
           job={selectedJobForReceipt}
-          company={customer.companies}
+          company={customer?.companies}
           onClose={() => setSelectedJobForReceipt(null)}
           gatewaysActive={gatewaysActive}
           onPay={(job) => {
@@ -920,11 +1124,23 @@ export default function CustomerPortal() {
       <OnboardingTour 
         tourKey="onboarding_customer_v2" 
         steps={[
-          { title: `Welcome to ${customer.companies?.name || 'our'}'s Portal!`, content: "Track all your print jobs, view your outstanding balances, and make payments all in one place." },
+          { title: `Welcome to ${customer?.companies?.name || 'our'}'s Portal!`, content: "Track all your print jobs, view your outstanding balances, and make payments all in one place." },
           { title: "Upload New Jobs", content: "Need something printed? Click the 'Upload New Job' button to securely send your design files and exact dimensions directly to the print shop." },
           { title: "Pay Online", content: "If you have an outstanding balance, you can easily pay it online. Just click the 'Pay' button next to any unpaid job!" }
         ]} 
       />
+      {/* Edit Job Upload Modal */}
+      {editingStagedJob && customer && (
+        <CustomerJobUploadModal 
+          customer={customer}
+          jobToEdit={editingStagedJob}
+          onClose={() => setEditingStagedJob(null)}
+          onSuccess={() => {
+            setEditingStagedJob(null)
+            loadData()
+          }}
+        />
+      )}
     </div>
   )
 }

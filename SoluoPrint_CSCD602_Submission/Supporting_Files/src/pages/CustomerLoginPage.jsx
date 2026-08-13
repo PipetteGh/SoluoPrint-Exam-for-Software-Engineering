@@ -39,9 +39,10 @@ export default function CustomerLoginPage() {
 
       localStorage.setItem('soluoprint_customer_id', data.id)
       
-      // Log Audit Activity
-      import('../lib/auditLogger').then(({ logAudit }) => {
-        logAudit({
+      // Log Audit Activity — AWAIT before navigating so the insert completes
+      try {
+        const { logAudit } = await import('../lib/auditLogger')
+        await logAudit({
           companyId: data.company_id,
           userId: data.id,
           actorName: data.name || data.username,
@@ -49,7 +50,9 @@ export default function CustomerLoginPage() {
           action: 'CUSTOMER_LOGIN',
           details: `Customer ${data.name} (${data.username}) logged into Customer Portal.`
         })
-      })
+      } catch (auditErr) {
+        console.warn('Audit log warning:', auditErr)
+      }
 
       setLoading(false)
       navigate('/customer')

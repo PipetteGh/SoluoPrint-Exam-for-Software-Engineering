@@ -193,6 +193,49 @@ export default function CustomersPage() {
     }
   }
 
+  async function sendCredentials(customer, username, password) {
+    const loginUrl = window.location.origin + '/login'
+    
+    // Send SMS
+    if (customer.phone) {
+      try {
+        const { notifyCustomer } = await import('../lib/sms')
+        const content = `Welcome to our print shop! We are excited to have you. Contact us for all your printing needs. Login to your portal at ${loginUrl} to upload artworks, view job statistics and other things. User: ${username} | Pass: ${password}`
+        await notifyCustomer(company?.id, customer.id, 'welcome', content)
+      } catch (e) {
+        console.error('Failed to send welcome sms', e)
+      }
+    }
+    
+    // Send Email
+    if (customer.email) {
+      try {
+        const { sendEmail } = await import('../lib/email')
+        await sendEmail(
+           customer.email, 
+           'Your Customer Portal Credentials', 
+           `<p>Welcome to ${company?.name || 'SoluoPrint'}!</p><p>You can track your print jobs and bills in our customer portal.</p><p>Login at: <a href="${loginUrl}">${loginUrl}</a></p><p>Username: <b>${username}</b></p><p>Password: <b>${password}</b></p>`,
+           company?.name || 'SoluoPrint'
+        )
+      } catch (e) {
+        console.error('Failed to send welcome email', e)
+      }
+    }
+    
+    // Create In-App Notification
+    try {
+      await supabase.from('notifications').insert({
+        company_id: company?.id,
+        title: 'Credentials Generated',
+        message: `Portal credentials generated for ${customer.name}.`,
+        type: 'system',
+        read: false
+      })
+    } catch (e) {
+      console.error('Failed to insert notification', e)
+    }
+  }
+
   async function bulkGenerateCredentials() {
     const isConfirmed = await confirm({
       title: 'Generate Portal Credentials',
@@ -236,6 +279,7 @@ export default function CustomersPage() {
           
         if (!error) {
           generatedCount++
+          await sendCredentials(cust, newUsername, newPassword)
         } else {
           failedCount++
         }
@@ -498,6 +542,7 @@ export default function CustomersPage() {
                         if (!error) {
                           toast.success('Credentials generated!')
                           setViewCredentials({ ...viewCredentials, username: newUsername, password: newPassword })
+                          await sendCredentials(viewCredentials, newUsername, newPassword)
                           load() // Refresh table
                         } else {
                           toast.error('Failed to generate credentials')

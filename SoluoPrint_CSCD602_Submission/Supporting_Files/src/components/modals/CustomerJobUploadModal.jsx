@@ -7,9 +7,17 @@ import { sendEmail } from '../../lib/email'
 import { logAudit } from '../../lib/auditLogger'
 import { recalculateCustomerBalance } from '../../lib/balanceUtils'
 
-export default function CustomerJobUploadModal({ onClose, onSuccess, customer }) {
-  const [form, setForm] = useState({ category: 'General', notes: '', width: '', height: '', unit: 'ft', quantity: 1 })
+export default function CustomerJobUploadModal({ onClose, onSuccess, customer, jobToEdit = null }) {
+  const [form, setForm] = useState({ 
+    category: jobToEdit?.services?.[0]?.name || 'General', 
+    notes: jobToEdit?.notes || '', 
+    width: '', 
+    height: '', 
+    unit: 'ft', 
+    quantity: 1 
+  })
   const [files, setFiles] = useState([])
+  const [existingImages, setExistingImages] = useState(jobToEdit?.images || [])
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadStep, setUploadStep] = useState('')
@@ -22,6 +30,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
   // Load service categories from the company's configuration
   useEffect(() => {
     async function loadCategories() {
+      if (!customer?.company_id) return
       const { data } = await supabase
         .from('service_categories')
         .select('name')
@@ -34,16 +43,34 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
       }
     }
     loadCategories()
-  }, [customer.company_id])
+  }, [customer?.company_id])
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFiles(prev => [...prev, ...Array.from(e.target.files)])
+      const selected = Array.from(e.target.files)
+      setFiles(prev => {
+        const combined = [...prev, ...selected]
+        const unique = []
+        const keys = new Set()
+        for (const f of combined) {
+          const key = `${f.name}_${f.size}`
+          if (!keys.has(key)) {
+            keys.add(key)
+            unique.push(f)
+          }
+        }
+        return unique
+      })
+      e.target.value = ''
     }
   }
 
   const removeFile = (index) => {
     setFiles(files.filter((_, i) => i !== index))
+  }
+
+  const removeExistingImage = (index) => {
+    setExistingImages(existingImages.filter((_, i) => i !== index))
   }
 
   // Primary: PHP upload (production server)
@@ -103,6 +130,42 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
     return urls
   }
 
+  function generateFormattedFileName(custName, originalFileName, index = 0) {
+    const cleanName = (custName || 'Customer')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .replace(/_+/g, '_')
+    
+    const now = new Date()
+    const pad = n => String(n).padStart(2, '0')
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    const timeStr = `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
+    
+    const ext = originalFileName.includes('.') ? originalFileName.split('.').pop() : 'png'
+    const suffix = index > 0 ? `_${index + 1}` : ''
+    return `${cleanName}_${dateStr}_${timeStr}${suffix}.${ext}`
+  }
+
+  function readFileAsDataUrl(file, index = 0) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result
+        const formattedName = generateFormattedFileName(customer?.name, file.name, index)
+        if (dataUrl && dataUrl.startsWith('data:')) {
+          const parts = dataUrl.split(';base64,')
+          const mime = parts[0].replace('data:', '')
+          const base64Data = parts[1]
+          // Embed customer_date_time.ext filename inside custom data URL scheme
+          resolve(`data:${mime};name=${encodeURIComponent(formattedName)};base64,${base64Data}`)
+        } else {
+          resolve(dataUrl)
+        }
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
   async function uploadFiles(fileArray) {
     if (!fileArray || fileArray.length === 0) return []
     
@@ -120,9 +183,12 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
         setUploadProgress(70)
         return result
       } catch (storageErr) {
-        console.warn('Supabase Storage failed, storing file names only:', storageErr.message)
+        console.warn('Supabase Storage failed, converting file to Base64 Data URL:', storageErr.message)
+        setUploadProgress(50)
+        setUploadStep('Encoding artwork for instant cloud preview...')
+        const dataUrls = await Promise.all(fileArray.map((f, i) => readFileAsDataUrl(f, i)))
         setUploadProgress(70)
-        return fileArray.map(f => `[uploaded:${f.name}]`)
+        return dataUrls
       }
     }
   }
@@ -138,94 +204,143 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
     setUploadProgress(5)
     setUploadStep('Initializing job upload...')
 
+    // Capture form values BEFORE any state resets so side effects have correct data
+    const capturedCategory = form.category
+    const capturedNotes = form.notes
+    const capturedWidth = form.width
+    const capturedHeight = form.height
+    const capturedUnit = form.unit
+    const capturedQuantity = form.quantity
+    const capturedFileCount = files.length
+
     try {
-      const fileUrls = await uploadFiles(files)
+      const newFileUrls = await uploadFiles(files)
+      const combinedImages = [...existingImages, ...newFileUrls]
+
+      if (combinedImages.length === 0) {
+        showToast('Please attach at least one file for your print job.', 'error')
+        setLoading(false)
+        return
+      }
 
       setUploadProgress(80)
-      setUploadStep('Submitting to shop Job List for review...')
+      setUploadStep(jobToEdit ? 'Updating your uploaded job...' : 'Submitting to shop Job List for review...')
 
-      // Primary: Insert into job_list ONLY (Staged Jobs for company review)
-      const dimensionsDesc = form.width && form.height ? ` (${form.width}x${form.height} ${form.unit})` : ''
-      const { data: newJob, error: jobErr } = await supabase
-        .from('job_list')
-        .insert({
-          company_id: customer.company_id,
-          customer_id: customer.id,
-          services: [{ name: form.category, unit_price: 0 }],
-          description: `${form.category}${dimensionsDesc} - Qty: ${form.quantity}`,
-          notes: form.notes || '',
-          status: 'Pending',
-          images: fileUrls
-        })
-        .select()
-        .single()
-
-      if (jobErr) throw jobErr
-
-      setUploadProgress(90)
-      setUploadStep('Notifying shop administration...')
-
-      // Recalculate customer balance
-      await recalculateCustomerBalance(customer.id)
-
-      // Log Audit Activity
-      logAudit({
-        companyId: customer.company_id,
-        userId: customer.id,
-        actorName: customer.name || 'Customer',
-        actorRole: 'Customer',
-        action: 'CUSTOMER_JOB_UPLOAD',
-        details: `Uploaded new staged job (${form.category}) with ${files.length} file(s). Notes: "${form.notes || 'None'}"`
-      })
-
-      // Add a notification for the admins
-      await supabase.from('notifications').insert({
+      const dimensionsDesc = capturedWidth && capturedHeight ? ` (${capturedWidth}x${capturedHeight} ${capturedUnit})` : ''
+      const payload = {
         company_id: customer.company_id,
-        title: 'New Customer Job Upload',
-        message: `${customer.name} uploaded a new ${form.category} job to Job List with ${files.length} file(s). ${form.notes ? `Notes: "${form.notes}"` : ''}`,
-        type: 'job_created',
-        read: false
-      })
+        customer_id: customer.id,
+        services: [{ name: capturedCategory, unit_price: 0 }],
+        description: `${capturedCategory}${dimensionsDesc} - Qty: ${capturedQuantity}`,
+        notes: capturedNotes || '',
+        status: jobToEdit?.status || 'Pending',
+        images: combinedImages
+      }
 
-      // Send SMS & Email Alerts to shop admin
-      try {
-        const [{ data: companyData }, { data: smsSettings }] = await Promise.all([
-          supabase.from('companies').select('name, email, phone').eq('id', customer.company_id).single(),
-          supabase.from('sms_settings').select('*').eq('company_id', customer.company_id).maybeSingle()
-        ])
+      let savedJob = null
+      if (jobToEdit) {
+        const { data: updatedJob, error: updateErr } = await supabase
+          .from('job_list')
+          .update(payload)
+          .eq('id', jobToEdit.id)
+          .select()
+          .single()
 
-        if (companyData) {
-          if (companyData.phone && smsSettings) {
-            const alertText = `Alert: ${customer.name} has uploaded a new ${form.category} job to your Job List with ${files.length} artwork file(s).`
-            sendSms(companyData.phone, alertText, smsSettings).catch(console.error)
-          }
+        if (updateErr) throw updateErr
+        savedJob = updatedJob
+      } else {
+        const { data: newJob, error: insertErr } = await supabase
+          .from('job_list')
+          .insert(payload)
+          .select()
+          .single()
 
-          if (companyData.email) {
-            const emailSubject = `[SoluoPrint] New Job List Upload from ${customer.name}`
-            const emailHtml = `
-              <h2>New Artwork Upload Received</h2>
-              <p><strong>Customer:</strong> ${customer.name}</p>
-              <p><strong>Category:</strong> ${form.category}</p>
-              <p><strong>Files Uploaded:</strong> ${files.length} artwork file(s)</p>
-              <p>Please log in to your SoluoPrint dashboard at <a href="${window.location.origin}">${window.location.origin}</a> to review and convert to print job.</p>
-            `
-            sendEmail(companyData.email, emailSubject, emailHtml, companyData.name || 'SoluoPrint Alerts').catch(console.error)
-          }
-        }
-      } catch (e) {
-        console.error('Admin notification dispatch error:', e)
+        if (insertErr) throw insertErr
+        savedJob = newJob
       }
 
       setUploadProgress(100)
-      setUploadStep('Upload Complete!')
-      showToast(`Job uploaded to shop Job List successfully! The shop will review and convert it shortly.`, 'success')
+      setUploadStep(jobToEdit ? 'Update Complete!' : 'Upload Complete!')
 
-      if (onSuccess) onSuccess(newJob)
-      if (onClose) onClose()
+      // Show success toast BEFORE closing
+      showToast(
+        jobToEdit
+          ? 'Uploaded job updated successfully!'
+          : 'Job uploaded to shop Job List successfully! The shop will review and convert it shortly.',
+        'success'
+      )
+
+      // Reset form state
+      setForm({
+        category: categories[0] || 'General',
+        notes: '',
+        width: '',
+        height: '',
+        unit: 'ft',
+        quantity: 1
+      })
+      setFiles([])
+      setExistingImages([])
+      setLoading(false)
+
+      // Close the modal — use setTimeout to ensure React commits the toast before unmount
+      setTimeout(() => {
+        if (onSuccess) onSuccess(savedJob)
+        if (onClose) onClose()
+      }, 150)
+
+      // Fire-and-forget side effects using captured values (NOT state which was already reset)
+      ;(async () => {
+        try {
+          await recalculateCustomerBalance(customer.id).catch(() => {})
+
+          await logAudit({
+            companyId: customer.company_id,
+            userId: customer.id,
+            actorName: customer.name || 'Customer',
+            actorRole: 'Customer',
+            action: 'CUSTOMER_JOB_UPLOAD',
+            details: `Uploaded new staged job (${capturedCategory}) with ${capturedFileCount} file(s). Notes: "${capturedNotes || 'None'}"`
+          })
+
+          await supabase.from('notifications').insert({
+            company_id: customer.company_id,
+            title: 'New Customer Job Upload',
+            message: `${customer.name} uploaded a new ${capturedCategory} job to Job List with ${capturedFileCount} file(s). ${capturedNotes ? `Notes: "${capturedNotes}"` : ''}`,
+            type: 'job_created',
+            read: false
+          }).catch(e => console.warn('Notification insert warn:', e))
+
+          const [{ data: companyData }, { data: smsSettings }] = await Promise.all([
+            supabase.from('companies').select('name, email, phone').eq('id', customer.company_id).single(),
+            supabase.from('sms_settings').select('*').eq('company_id', customer.company_id).maybeSingle()
+          ])
+
+          if (companyData) {
+            if (companyData.phone && smsSettings) {
+              const alertText = `Alert: ${customer.name} has uploaded a new ${capturedCategory} job to your Job List with ${capturedFileCount} artwork file(s).`
+              sendSms(companyData.phone, alertText, smsSettings).catch(console.error)
+            }
+
+            if (companyData.email) {
+              const emailSubject = `[SoluoPrint] New Job List Upload from ${customer.name}`
+              const emailHtml = `
+                <h2>New Artwork Upload Received</h2>
+                <p><strong>Customer:</strong> ${customer.name}</p>
+                <p><strong>Category:</strong> ${capturedCategory}</p>
+                <p><strong>Files Uploaded:</strong> ${capturedFileCount} artwork file(s)</p>
+              `
+              sendEmail(companyData.email, emailSubject, emailHtml, companyData.name || 'SoluoPrint Alerts').catch(console.error)
+            }
+          }
+        } catch (e) {
+          console.warn('Background notification alert warn:', e)
+        }
+      })()
+
     } catch (err) {
       console.error('Job submit error:', err)
       showToast(err.message || 'Failed to submit job.', 'error')
-    } finally {
       setLoading(false)
     }
   }

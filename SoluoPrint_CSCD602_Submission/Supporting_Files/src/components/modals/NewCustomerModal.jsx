@@ -69,10 +69,12 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
       
       // If phone is provided, send SMS with credentials
       if (form.phone) {
-          const { data: smsSettings } = await supabase.from('sms_settings').select('*').eq('company_id', company.id).single()
-          if (smsSettings && smsSettings.customer_welcome !== false) {
-            const { sendSms } = await import('../../lib/sms')
-            await sendSms(form.phone, `Welcome! Login to your portal at ${loginUrl} | User: ${username} | Pass: ${password}`, smsSettings)
+          try {
+            const { notifyCustomer } = await import('../../lib/sms')
+            const content = `Welcome to our print shop! We are excited to have you. Contact us for all your printing needs. Login to your portal at ${loginUrl} to upload artworks, view job statistics and other things. User: ${username} | Pass: ${password}`
+            await notifyCustomer(company.id, newCust.id, 'welcome', content)
+          } catch (e) {
+            console.error('Failed to send welcome sms', e)
           }
       }
       
