@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useConfirm } from '../contexts/ConfirmContext'
+import { recalculateCustomerBalance } from '../lib/balanceUtils'
 import { supabase } from '../lib/supabase'
 import { CreditCard, Plus, Trash2, Calendar, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import NewPaymentModal from '../components/modals/NewPaymentModal'
@@ -380,7 +381,13 @@ export default function PaymentsPage() {
                           cancelText: 'Cancel',
                           type: 'danger'
                         })
-                        if(isConfirmed){await supabase.from('payments').delete().eq('id',p.id); toast.success('Payment deleted'); load()}
+                        if(isConfirmed){
+                          const custId = p.customer_id
+                          await supabase.from('payments').delete().eq('id',p.id)
+                          if (custId) await recalculateCustomerBalance(custId)
+                          toast.success('Payment deleted')
+                          load()
+                        }
                       }}>
                         <Trash2 size={16} />
                       </button>

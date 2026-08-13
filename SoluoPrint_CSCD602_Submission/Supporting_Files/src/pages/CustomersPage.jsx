@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useConfirm } from '../contexts/ConfirmContext'
+import { syncAllCompanyCustomerBalances } from '../lib/balanceUtils'
 import { supabase } from '../lib/supabase'
 import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, ChevronLeft, ChevronRight, Key } from 'lucide-react'
 import SEO from '../components/ui/SEO'
@@ -128,6 +129,7 @@ export default function CustomersPage() {
   useEffect(() => { if (company) load() }, [company])
 
   async function load() {
+    await syncAllCompanyCustomerBalances(company.id)
     const { data } = await supabase
       .from('customers')
       .select('*,customer_types(name)')

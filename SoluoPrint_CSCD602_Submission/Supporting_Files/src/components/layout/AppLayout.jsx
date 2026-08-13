@@ -80,10 +80,17 @@ export default function AppLayout() {
       )
       .subscribe()
 
+    // Silent background heartbeat timer for fail-safe real-time syncing
+    const heartbeat = setInterval(() => {
+      loadNotifications()
+      loadCounts()
+    }, 4000)
+
     return () => {
       supabase.removeChannel(channelNotif)
       supabase.removeChannel(channelJobList)
       supabase.removeChannel(channelPrintJobs)
+      clearInterval(heartbeat)
     }
   }, [company?.id])
 

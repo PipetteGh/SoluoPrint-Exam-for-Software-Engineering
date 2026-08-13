@@ -4,7 +4,7 @@ import { useToast } from '../contexts/ToastContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { recalculateCustomerBalance } from '../lib/balanceUtils'
 import { supabase } from '../lib/supabase'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Printer, Plus, Edit, Trash2, Search, ChevronDown, ChevronLeft, ChevronRight, ArrowLeft, X, Calendar, FileText, CreditCard, HelpCircle } from 'lucide-react'
 import Select from 'react-select'
 import NewCustomerModal from '../components/modals/NewCustomerModal'
@@ -876,6 +876,30 @@ export default function PrintJobsPage() {
                       {j.job_number}
                     </button>
                   ) : '-'}
+                  {j.design_file_url && (
+                    <a 
+                      href={j.design_file_url.split(',')[0]} 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '3px', 
+                        marginLeft: '6px', 
+                        fontSize: '11px', 
+                        fontWeight: 600,
+                        background: '#eff6ff', 
+                        color: '#2563eb', 
+                        border: '1px solid #bfdbfe',
+                        padding: '1px 6px', 
+                        borderRadius: '10px',
+                        textDecoration: 'none'
+                      }}
+                      title="View/Download attached files"
+                    >
+                      📄 Artwork ({j.design_file_url.split(',').length})
+                    </a>
+                  )}
                 </td>
                 <td style={{ fontWeight: 500 }}>{j.customers?.name || '-'}</td>
                 <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{j.services?.name || '-'}</td>
@@ -964,7 +988,7 @@ export default function PrintJobsPage() {
         <ReceiptModal 
           job={{
             ...viewReceiptJob,
-            profiles: { full_name: profiles.find(p => p.id === viewReceiptJob.assigned_to)?.full_name }
+            profiles: { full_name: (profiles || []).find(p => p.id === viewReceiptJob.assigned_to)?.full_name || 'Staff' }
           }} 
           company={company} 
           onClose={() => setViewReceiptJob(null)} 

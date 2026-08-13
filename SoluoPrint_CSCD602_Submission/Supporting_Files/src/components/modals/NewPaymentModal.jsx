@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
+import { recalculateCustomerBalance } from '../../lib/balanceUtils'
 import { supabase } from '../../lib/supabase'
 import Select from 'react-select'
 
@@ -94,11 +95,9 @@ export default function NewPaymentModal({ onClose, onSuccess, preSelectedCustome
         
         await supabase.from('print_jobs').update(updateData).eq('id', form.job_id)
       }
-      // Update customer balance
-      const customer = customers.find(c => c.id === form.customer_id)
-      if (customer) {
-        const newBalance = Math.max(0, (customer.balance || 0) - amount)
-        await supabase.from('customers').update({ balance: newBalance }).eq('id', form.customer_id)
+      // Recalculate customer balance with 100% financial accuracy
+      if (form.customer_id) {
+        await recalculateCustomerBalance(form.customer_id)
       }
     }
 

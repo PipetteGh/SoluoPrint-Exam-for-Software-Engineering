@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight, LayoutDashboard, User, HelpCircle } from 'lucide-react'
+import { recalculateCustomerBalance } from '../lib/balanceUtils'
+import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight, LayoutDashboard, User, HelpCircle, ClipboardList } from 'lucide-react'
 import SEO from '../components/ui/SEO'
 import ExportToolbar from '../components/ui/ExportToolbar'
+import FileGallery from '../components/ui/FileGallery'
 import CustomerJobUploadModal from '../components/modals/CustomerJobUploadModal'
 import CustomerPaymentModal from '../components/modals/CustomerPaymentModal'
 import ReceiptModal from '../components/modals/ReceiptModal'
@@ -46,6 +48,7 @@ function formatDateTime(dateStr) {
 export default function CustomerPortal() {
   const [customer, setCustomer] = useState(null)
   const [jobs, setJobs] = useState([])
+  const [stagedJobs, setStagedJobs] = useState([])
   const [payments, setPayments] = useState([])
   const [totalPayments, setTotalPayments] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -87,6 +90,28 @@ export default function CustomerPortal() {
 
   useEffect(() => {
     loadData()
+    const custId = localStorage.getItem('soluoprint_customer_id')
+    if (!custId) return
+
+    // Supabase Real-time listener for customer jobs
+    const channel = supabase
+      .channel(`public:customer:${custId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'print_jobs', filter: `customer_id=eq.${custId}` },
+        () => {
+          loadData()
+        }
+      )
+      .subscribe()
+
+    // Silent background heartbeat timer
+    const interval = setInterval(loadData, 5000)
+
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(interval)
+    }
   }, [])
 
   async function loadData() {
@@ -95,6 +120,9 @@ export default function CustomerPortal() {
       navigate('/customer-login')
       return
     }
+
+    // Recalculate customer balance with 100% financial integrity before loading
+    await recalculateCustomerBalance(custId)
 
     const { data: cust, error: custErr } = await supabase
       .from('customers')
@@ -119,7 +147,7 @@ export default function CustomerPortal() {
       setGatewaysActive(true)
     }
 
-    // Fetch jobs
+    // Fetch print jobs
     const { data: jobData } = await supabase
       .from('print_jobs')
       .select('*')
@@ -127,6 +155,15 @@ export default function CustomerPortal() {
       .order('created_at', { ascending: false })
     
     setJobs(jobData || [])
+
+    // Fetch staged jobs from job_list (uploaded jobs pending shop conversion)
+    const { data: stagedData } = await supabase
+      .from('job_list')
+      .select('*')
+      .eq('customer_id', custId)
+      .order('created_at', { ascending: false })
+
+    setStagedJobs(stagedData || [])
 
     // Fetch payments and calculate total amount
     const { data: paymentsData } = await supabase
@@ -284,8 +321,8 @@ export default function CustomerPortal() {
               <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)' }}><CreditCard size={22} color="#ef4444" /></div>
               <div className="stat-info">
                 <div className="stat-label">Outstanding Balance</div>
-                <div className="stat-value" style={{ color: Number(customer.balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
-                  {currency} {Number(customer.balance || 0).toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                <div className="stat-value" style={{ color: Number(customer?.balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
+                  {currency} {Math.max(0, Number(customer?.balance || 0)).toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </div>
               </div>
               {Number(customer.balance) > 0 && gatewaysActive && (
@@ -654,6 +691,63 @@ export default function CustomerPortal() {
       )
     }
 
+    if (activeTab === 'staged') {
+      return (
+        <>
+          <div className="page-header">
+            <div>
+              <h1 className="page-title">Job List (Staged Uploads)</h1>
+              <div className="page-subtitle">Your uploaded jobs waiting for shop review & pricing</div>
+            </div>
+            <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
+              <Plus size={16} /> Upload New Job
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gap: '20px' }}>
+            {stagedJobs.length === 0 ? (
+              <div className="card" style={{ padding: '60px 40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <ClipboardList size={48} style={{ opacity: 0.2, margin: '0 auto 16px' }} />
+                <h3>No staged jobs uploaded yet</h3>
+                <p style={{ fontSize: '13px' }}>Upload your design files or artwork and the shop will review and convert them into print jobs.</p>
+                <button className="btn btn-primary" onClick={() => setShowUploadModal(true)} style={{ marginTop: '12px' }}>
+                  <Plus size={16} /> Upload Your First Job
+                </button>
+              </div>
+            ) : (
+              stagedJobs.map(item => (
+                <div key={item.id} className="card" style={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '16px', color: '#1e293b' }}>
+                        {item.description || 'Custom Print Upload'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Uploaded on {new Date(item.created_at).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(item.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                    <span className={`status-badge status-${item.status?.toLowerCase() === 'converted' ? 'completed' : 'pending'}`}>
+                      {item.status === 'Converted' ? 'Converted to Print Job' : 'Pending Shop Review'}
+                    </span>
+                  </div>
+
+                  {item.notes && (
+                    <div style={{ fontSize: '13px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', color: '#92400e' }}>
+                      <strong>Instructions:</strong> {item.notes}
+                    </div>
+                  )}
+
+                  {(item.images || []).length > 0 && (
+                    <FileGallery files={item.images} title="Attached Artwork & Documents" />
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )
+    }
+
     if (activeTab === 'profile') {
       return (
         <>
@@ -715,11 +809,23 @@ export default function CustomerPortal() {
             <span>Dashboard</span>
           </button>
           <button 
+            className={`nav-item ${activeTab === 'staged' ? 'active' : ''}`} 
+            onClick={() => { setActiveTab('staged'); setSidebarOpen(false) }}
+          >
+            <ClipboardList />
+            <span>Job List (Staged)</span>
+            {stagedJobs.filter(j => j.status === 'Pending').length > 0 && (
+              <span style={{ marginLeft: 'auto', background: '#2563eb', color: 'white', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '10px' }}>
+                {stagedJobs.filter(j => j.status === 'Pending').length}
+              </span>
+            )}
+          </button>
+          <button 
             className={`nav-item ${activeTab === 'jobs' ? 'active' : ''}`} 
             onClick={() => { setActiveTab('jobs'); setSidebarOpen(false) }}
           >
             <FileText />
-            <span>My Jobs</span>
+            <span>Print Jobs</span>
           </button>
           <button 
             className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`} 

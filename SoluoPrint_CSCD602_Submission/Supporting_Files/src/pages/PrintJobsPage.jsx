@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useConfirm } from '../contexts/ConfirmContext'
+import { recalculateCustomerBalance } from '../lib/balanceUtils'
 import { supabase } from '../lib/supabase'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Printer, Plus, Edit, Trash2, Search, ChevronDown, ChevronLeft, ChevronRight, ArrowLeft, X, Calendar, FileText, CreditCard, HelpCircle } from 'lucide-react'
 import Select from 'react-select'
 import NewCustomerModal from '../components/modals/NewCustomerModal'
@@ -185,6 +186,11 @@ function JobForm({ job, company, initialCategory, onBack, onSuccess }) {
       return 
     }
     toast.success(job ? 'Job updated' : 'Job created')
+    
+    // Recalculate customer balance with 100% financial integrity
+    if (form.customer_id) {
+      recalculateCustomerBalance(form.customer_id)
+    }
     
     // SMS Notification on update
     if (job?.id && form.status !== job.status) {
@@ -601,6 +607,11 @@ export default function PrintJobsPage() {
       } else {
         toast.success('Job deleted successfully')
         
+        // Recalculate customer balance after deletion
+        if (targetJob?.customer_id) {
+          await recalculateCustomerBalance(targetJob.customer_id)
+        }
+        
         // Audit log
         import('../lib/auditLogger').then(({ logAudit }) => {
           logAudit({
@@ -633,6 +644,7 @@ export default function PrintJobsPage() {
       // Send SMS on status change
       const job = jobs.find(j => j.id === id)
       if (job) {
+        if (job.customer_id) recalculateCustomerBalance(job.customer_id)
         const msg = `Status Update: Your job ${job.job_number} is now ${newStatus}. Thank you!`
         import('../lib/sms').then(({ notifyCustomer }) => {
           notifyCustomer(company.id, job.customer_id, 'job_completed', msg)
@@ -864,6 +876,30 @@ export default function PrintJobsPage() {
                       {j.job_number}
                     </button>
                   ) : '-'}
+                  {j.design_file_url && (
+                    <a 
+                      href={j.design_file_url.split(',')[0]} 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '3px', 
+                        marginLeft: '6px', 
+                        fontSize: '11px', 
+                        fontWeight: 600,
+                        background: '#eff6ff', 
+                        color: '#2563eb', 
+                        border: '1px solid #bfdbfe',
+                        padding: '1px 6px', 
+                        borderRadius: '10px',
+                        textDecoration: 'none'
+                      }}
+                      title="View/Download attached files"
+                    >
+                      📄 Artwork ({j.design_file_url.split(',').length})
+                    </a>
+                  )}
                 </td>
                 <td style={{ fontWeight: 500 }}>{j.customers?.name || '-'}</td>
                 <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{j.services?.name || '-'}</td>
@@ -952,7 +988,7 @@ export default function PrintJobsPage() {
         <ReceiptModal 
           job={{
             ...viewReceiptJob,
-            profiles: { full_name: profiles.find(p => p.id === viewReceiptJob.assigned_to)?.full_name }
+            profiles: { full_name: (profiles || []).find(p => p.id === viewReceiptJob.assigned_to)?.full_name || 'Staff' }
           }} 
           company={company} 
           onClose={() => setViewReceiptJob(null)} 

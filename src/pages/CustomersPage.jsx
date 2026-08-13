@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useConfirm } from '../contexts/ConfirmContext'
+import { syncAllCompanyCustomerBalances } from '../lib/balanceUtils'
 import { supabase } from '../lib/supabase'
 import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, ChevronLeft, ChevronRight, Key } from 'lucide-react'
 import SEO from '../components/ui/SEO'
@@ -20,6 +21,7 @@ function EditCustomerModal({ customer, company, onClose, onSuccess }) {
     is_active: customer.is_active !== false
   })
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [showPortalModal, setShowPortalModal] = useState(false)
   const toast = useToast()
   const { confirm } = useConfirm()
@@ -128,21 +130,31 @@ export default function CustomersPage() {
   useEffect(() => { if (company) load() }, [company])
 
   async function load() {
-    const { data } = await supabase
-      .from('customers')
-      .select('*,customer_types(name)')
-      .eq('company_id', company.id)
-      .order('created_at', { ascending: false })
-    const all = data || []
-    setCustomers(all)
-    setStats({
-      total: all.length,
-      active: all.filter(c => c.is_active).length,
-      owed: all.reduce((s, c) => s + (c.balance || 0), 0),
-      credit: all.reduce((s, c) => s + (c.credit_balance || 0), 0)
-    })
-    setSelectedIds([])
-    setLoading(false)
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*,customer_types(name)')
+        .eq('company_id', company.id)
+        .order('created_at', { ascending: false })
+      
+      if (error) console.error('Error fetching customers:', error)
+      const all = data || []
+      setCustomers(all)
+      setStats({
+        total: all.length,
+        active: all.filter(c => c.is_active).length,
+        owed: all.reduce((s, c) => s + (c.balance || 0), 0),
+        credit: all.reduce((s, c) => s + (c.credit_balance || 0), 0)
+      })
+      setSelectedIds([])
+      // Non-blocking background sync of customer balances
+      syncAllCompanyCustomerBalances(company.id).catch(console.error)
+    } catch (err) {
+      console.error('Customer load exception:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function deleteCustomer(id) {

@@ -8,8 +8,8 @@ export default function Preloader({ fullScreen = false, message = null, style = 
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '24px',
-        minHeight: fullScreen ? '100vh' : '320px',
+        padding: '32px',
+        minHeight: fullScreen ? '100vh' : '360px',
         width: '100%',
         backgroundColor: fullScreen ? '#ffffff' : 'transparent',
         position: fullScreen ? 'fixed' : 'relative',
@@ -18,32 +18,31 @@ export default function Preloader({ fullScreen = false, message = null, style = 
         ...style
       }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '32px', width: '100%' }}>
         {/* Animated Brand Circular Spinner */}
         <div
           style={{
-            width: '54px',
-            height: '54px',
+            width: '64px',
+            height: '64px',
             borderRadius: '50%',
-            border: '4px solid #e2e8f0',
+            border: '5px solid #e2e8f0',
             borderTopColor: '#2563eb',
             borderRightColor: '#10b981',
             animation: 'soluoSpin 0.75s linear infinite'
           }}
         />
 
-        {/* Brand Logo Only (Prominent & Responsive) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', maxWidth: '85vw' }}>
+        {/* Brand Logo Only (Large & Responsive) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', maxWidth: '85vw' }}>
           <img 
             src="/logo.png" 
             alt="SoluoPrint Logo" 
             style={{ 
-              height: '75px', 
-              maxHeight: '100px', 
-              maxWidth: '280px', 
-              width: 'auto', 
-              objectFit: 'contain',
-              filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.06))'
+              height: '160px', 
+              maxHeight: '220px', 
+              maxWidth: '520px', 
+              width: '85vw', 
+              objectFit: 'contain'
             }}
             onError={(e) => {
               e.target.style.display = 'none'
@@ -56,31 +55,31 @@ export default function Preloader({ fullScreen = false, message = null, style = 
             style={{ 
               display: 'none', 
               alignItems: 'center', 
-              gap: '10px', 
+              gap: '14px', 
               fontWeight: 800, 
-              fontSize: '28px', 
+              fontSize: '42px', 
               color: '#1e293b', 
-              letterSpacing: '-0.5px' 
+              letterSpacing: '-1px' 
             }}
           >
             <div style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '12px',
+              width: '60px',
+              height: '60px',
+              borderRadius: '16px',
               background: 'linear-gradient(135deg, #2563eb, #10b981)',
               color: 'white',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 900,
-              fontSize: '20px'
+              fontSize: '28px'
             }}>SP</div>
             <span>Soluo<span style={{ color: '#10b981' }}>Print</span></span>
           </div>
         </div>
 
         {message && (
-          <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 500, marginTop: '2px' }}>
+          <div style={{ fontSize: '15px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>
             {message}
           </div>
         )}

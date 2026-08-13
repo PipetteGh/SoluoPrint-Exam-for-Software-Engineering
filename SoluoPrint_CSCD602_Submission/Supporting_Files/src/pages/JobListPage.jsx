@@ -4,7 +4,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { supabase } from '../lib/supabase'
-import { ClipboardList, Plus, Edit, Trash2, Search, ArrowRight, ChevronLeft, ChevronRight, Eye, CheckCircle2, HelpCircle, X, Image } from 'lucide-react'
+import { ClipboardList, Plus, Edit, Trash2, Search, ArrowRight, ChevronLeft, ChevronRight, Eye, CheckCircle2, HelpCircle, X, Image as ImageIcon } from 'lucide-react'
+import FileGallery from '../components/ui/FileGallery'
 import { TableSkeleton } from '../components/ui/Skeletons'
 import SEO from '../components/ui/SEO'
 import NewJobListModal from '../components/modals/NewJobListModal'
@@ -255,7 +256,7 @@ export default function JobListPage() {
                   {item.customers?.name || 'Unknown'}
                   {(item.images || []).length > 0 && (
                     <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                      <Image size={12} /> {item.images.length}
+                      <ImageIcon size={12} /> {item.images.length}
                     </span>
                   )}
                 </td>
@@ -420,26 +421,8 @@ export default function JobListPage() {
                   </div>
                 )}
                 {(showDetail.images || []).length > 0 && (
-                  <div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Image size={14} /> Images ({showDetail.images.length})
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {showDetail.images.map((url, i) => {
-                        const imgSrc = window.location.hostname === 'localhost' && !url.startsWith('http') ? `http://localhost${url}` : url
-                        return (
-                          <div
-                            key={i}
-                            onClick={() => setLightboxImage(imgSrc)}
-                            style={{ width: '90px', height: '90px', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s' }}
-                            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)' }}
-                            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none' }}
-                          >
-                            <img src={imgSrc} alt={`Image ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </div>
-                        )
-                      })}
-                    </div>
+                  <div style={{ marginTop: '4px' }}>
+                    <FileGallery files={showDetail.images} title="Uploaded Artwork & Documents" />
                   </div>
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
