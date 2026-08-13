@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight, LayoutDashboard, User } from 'lucide-react'
+import { LogOut, FileText, CheckCircle, Clock, CreditCard, Plus, Receipt, Search, ChevronLeft, ChevronRight, LayoutDashboard, User, HelpCircle } from 'lucide-react'
 import SEO from '../components/ui/SEO'
 import ExportToolbar from '../components/ui/ExportToolbar'
 import CustomerJobUploadModal from '../components/modals/CustomerJobUploadModal'
 import CustomerPaymentModal from '../components/modals/CustomerPaymentModal'
+import ReceiptModal from '../components/modals/ReceiptModal'
 import OnboardingTour from '../components/ui/OnboardingTour'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
@@ -26,6 +27,20 @@ const whiteBackgroundPlugin = {
 
 ChartJS.register(ArcElement, Filler, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend, whiteBackgroundPlugin)
 
+function formatDateTime(dateStr) {
+  if (!dateStr) return 'N/A'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  })
+}
+
 export default function CustomerPortal() {
   const [customer, setCustomer] = useState(null)
   const [jobs, setJobs] = useState([])
@@ -39,6 +54,8 @@ export default function CustomerPortal() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [gatewaysActive, setGatewaysActive] = useState(false)
   const [selectedJobToPay, setSelectedJobToPay] = useState(null)
+  const [selectedJobForReceipt, setSelectedJobForReceipt] = useState(null)
+  const [runTour, setRunTour] = useState(false)
   
   // Pagination & Search state
   const [searchTerm, setSearchTerm] = useState('')
@@ -429,11 +446,18 @@ export default function CustomerPortal() {
                     {jobs.slice(0, 10).map(job => (
                       <tr key={job.id}>
                         <td style={{ fontWeight: 500 }}>
-                          {job.job_number || 'N/A'}
+                          <button 
+                            onClick={() => setSelectedJobForReceipt(job)}
+                            style={{ background: 'none', border: 'none', padding: 0, color: '#2563eb', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'underline' }}
+                            title="Click to view Invoice/Receipt"
+                          >
+                            <Receipt size={14} />
+                            <span>{job.job_number || 'N/A'}</span>
+                          </button>
                           {job.design_file_url && <a href={job.design_file_url} target="_blank" rel="noreferrer" style={{ marginLeft: '8px', fontSize: '12px', color: 'var(--primary)', textDecoration: 'none' }}>(File)</a>}
                         </td>
                         <td>{job.category || 'General'}</td>
-                        <td>{new Date(job.job_date).toLocaleDateString()}</td>
+                        <td>{formatDateTime(job.job_date || job.created_at)}</td>
                         <td>
                           <span className={`status-badge status-${job.status?.toLowerCase().replace(' ', '-') || 'pending'}`}>
                             {job.status || 'Pending'}
@@ -442,9 +466,14 @@ export default function CustomerPortal() {
                         <td style={{ textAlign: 'right' }}>{currency} {Number(job.total_price).toFixed(2)}</td>
                         <td style={{ textAlign: 'right' }}>{currency} {Number(job.balance).toFixed(2)}</td>
                         <td style={{ textAlign: 'right' }}>
-                          {Number(job.balance) > 0 && gatewaysActive && (
-                            <button className="btn btn-primary btn-sm" onClick={() => setSelectedJobToPay(job)}>Pay</button>
-                          )}
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => setSelectedJobForReceipt(job)} title="View Receipt">
+                              Receipt
+                            </button>
+                            {Number(job.balance) > 0 && gatewaysActive && (
+                              <button className="btn btn-primary btn-sm" onClick={() => setSelectedJobToPay(job)}>Pay</button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -497,18 +526,25 @@ export default function CustomerPortal() {
                       <th>Job Number</th>
                       <th>Category</th>
                       <th>Details</th>
-                      <th>Date</th>
+                      <th>Date & Time</th>
                       <th>Status</th>
                       <th style={{ textAlign: 'right' }}>Total</th>
                       <th style={{ textAlign: 'right' }}>Balance</th>
-                      <th style={{ width: '80px' }}></th>
+                      <th style={{ width: '140px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedJobs.map(job => (
                       <tr key={job.id}>
                         <td style={{ fontWeight: 500 }}>
-                          {job.job_number || 'N/A'}
+                          <button 
+                            onClick={() => setSelectedJobForReceipt(job)}
+                            style={{ background: 'none', border: 'none', padding: 0, color: '#2563eb', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'underline' }}
+                            title="Click to view Invoice/Receipt"
+                          >
+                            <Receipt size={14} />
+                            <span>{job.job_number || 'N/A'}</span>
+                          </button>
                           {job.design_file_url && <a href={job.design_file_url} target="_blank" rel="noreferrer" style={{ marginLeft: '8px', fontSize: '12px', color: 'var(--primary)', textDecoration: 'none' }}>(File)</a>}
                         </td>
                         <td>{job.category || 'General'}</td>
@@ -517,7 +553,7 @@ export default function CustomerPortal() {
                             {job.quantity}x {job.width && job.height ? `${job.width}x${job.height} ${job.unit}` : ''}
                           </div>
                         </td>
-                        <td>{new Date(job.job_date).toLocaleDateString()}</td>
+                        <td>{formatDateTime(job.job_date || job.created_at)}</td>
                         <td>
                           <span className={`status-badge status-${job.status?.toLowerCase().replace(' ', '-') || 'pending'}`}>
                             {job.status || 'Pending'}
@@ -526,9 +562,14 @@ export default function CustomerPortal() {
                         <td style={{ textAlign: 'right' }}>{currency} {Number(job.total_price).toFixed(2)}</td>
                         <td style={{ textAlign: 'right' }}>{currency} {Number(job.balance).toFixed(2)}</td>
                         <td style={{ textAlign: 'right' }}>
-                          {Number(job.balance) > 0 && gatewaysActive && (
-                            <button className="btn btn-primary btn-sm" onClick={() => setSelectedJobToPay(job)}>Pay</button>
-                          )}
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => setSelectedJobForReceipt(job)} title="View Receipt">
+                              Receipt
+                            </button>
+                            {Number(job.balance) > 0 && gatewaysActive && (
+                              <button className="btn btn-primary btn-sm" onClick={() => setSelectedJobToPay(job)}>Pay</button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -656,7 +697,18 @@ export default function CustomerPortal() {
             </button>
             <h2 className="hide-mobile" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>{activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'jobs' ? 'My Jobs' : 'My Profile'}</h2>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button 
+              onClick={() => {
+                localStorage.removeItem('onboarding_customer_v2_completed')
+                setRunTour(prev => !prev)
+              }} 
+              className="btn btn-ghost btn-sm" 
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#2563eb' }}
+              title="View Customer Portal Guide & Tour"
+            >
+              <HelpCircle size={16} /> Portal Guide
+            </button>
             <span style={{ fontWeight: 500 }}>{customer.name}</span>
             <button onClick={handleLogout} className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <LogOut size={14} /> Logout
@@ -681,6 +733,19 @@ export default function CustomerPortal() {
         />
       )}
 
+      {selectedJobForReceipt && (
+        <ReceiptModal
+          job={selectedJobForReceipt}
+          company={customer.companies}
+          onClose={() => setSelectedJobForReceipt(null)}
+          gatewaysActive={gatewaysActive}
+          onPay={(job) => {
+            setSelectedJobForReceipt(null)
+            setSelectedJobToPay(job)
+          }}
+        />
+      )}
+
       {(showPaymentModal || selectedJobToPay) && (
         <CustomerPaymentModal
           customer={customer}
@@ -699,7 +764,7 @@ export default function CustomerPortal() {
       )}
 
       <OnboardingTour 
-        tourKey="onboarding_customer_v1" 
+        tourKey="onboarding_customer_v2" 
         steps={[
           { title: `Welcome to ${customer.companies?.name || 'our'}'s Portal!`, content: "Track all your print jobs, view your outstanding balances, and make payments all in one place." },
           { title: "Upload New Jobs", content: "Need something printed? Click the 'Upload New Job' button to securely send your design files and exact dimensions directly to the print shop." },

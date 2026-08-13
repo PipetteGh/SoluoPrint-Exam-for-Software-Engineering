@@ -6,6 +6,7 @@ import SEO from '../components/ui/SEO'
 import ExportToolbar from '../components/ui/ExportToolbar'
 import CustomerJobUploadModal from '../components/modals/CustomerJobUploadModal'
 import CustomerPaymentModal from '../components/modals/CustomerPaymentModal'
+import ReceiptModal from '../components/modals/ReceiptModal'
 import OnboardingTour from '../components/ui/OnboardingTour'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
