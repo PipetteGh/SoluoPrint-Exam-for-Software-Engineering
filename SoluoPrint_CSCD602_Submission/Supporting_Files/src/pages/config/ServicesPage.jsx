@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { supabase } from '../../lib/supabase'
 import { Wrench, Plus, Edit, Trash2, Search, ArrowLeft, FolderOpen, Download, Upload, MoreVertical, Calculator, CheckCircle, XCircle } from 'lucide-react'
 import PriceCalculatorModal from '../../components/modals/PriceCalculatorModal'
@@ -243,6 +244,8 @@ function ServiceForm({ service, company, categories, onBack, onSuccess }) {
 // ─── MAIN SERVICES PAGE (two-panel layout) ─────────────────────────
 export default function ServicesPage() {
   const { company } = useAuth()
+  const toast = useToast()
+  const { confirm } = useConfirm()
   const [categories, setCategories] = useState([])
   const [services, setServices] = useState([])
   const [selectedCat, setSelectedCat] = useState('all')
@@ -257,7 +260,6 @@ export default function ServicesPage() {
   const [showCalculator, setShowCalculator] = useState(false)
   const [calculatorService, setCalculatorService] = useState(null)
   const [stats, setStats] = useState({ total: 0, active: 0, categories: 0, inactive: 0 })
-  const toast = useToast()
   const currency = company?.currency_symbol || '¢'
 
   useEffect(() => {
@@ -575,7 +577,14 @@ export default function ServicesPage() {
                                 </button>
                                 <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
                                 <button className="dropdown-item danger" onClick={async () => { 
-                                  if (confirm('Delete this service?')) { 
+                                  const isConfirmed = await confirm({
+                                    title: 'Delete Printing Service',
+                                    message: 'Are you sure you want to delete this service?',
+                                    confirmText: 'Yes, Delete Service',
+                                    cancelText: 'Cancel',
+                                    type: 'danger'
+                                  })
+                                  if (isConfirmed) { 
                                     const { error } = await supabase.from('services').delete().eq('id', s.id)
                                     if (error) toast.error('Failed to delete service')
                                     else {

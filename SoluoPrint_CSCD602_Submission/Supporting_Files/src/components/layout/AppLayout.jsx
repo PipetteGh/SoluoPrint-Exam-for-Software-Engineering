@@ -33,6 +33,8 @@ export default function AppLayout() {
   const [showNewCustomer, setShowNewCustomer] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [pendingJobListCount, setPendingJobListCount] = useState(0)
+  const [todayPrintJobsCount, setTodayPrintJobsCount] = useState(0)
   const quickActionsRef = useRef(null)
   const userMenuRef = useRef(null)
   const notificationsRef = useRef(null)
@@ -41,8 +43,9 @@ export default function AppLayout() {
   useEffect(() => {
     if (!company?.id) return
     loadNotifications()
+    loadCounts()
 
-    const channel = supabase
+    const channelNotif = supabase
       .channel(`public:notifications:${company.id}`)
       .on(
         'postgres_changes',
@@ -50,14 +53,68 @@ export default function AppLayout() {
         (payload) => {
           setNotifications(prev => [payload.new, ...prev])
           setUnreadCount(count => count + 1)
+          loadCounts()
+        }
+      )
+      .subscribe()
+
+    const channelJobList = supabase
+      .channel(`public:job_list:${company.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'job_list', filter: `company_id=eq.${company.id}` },
+        () => {
+          loadCounts()
+        }
+      )
+      .subscribe()
+
+    const channelPrintJobs = supabase
+      .channel(`public:print_jobs:${company.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'print_jobs', filter: `company_id=eq.${company.id}` },
+        () => {
+          loadCounts()
         }
       )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      supabase.removeChannel(channelNotif)
+      supabase.removeChannel(channelJobList)
+      supabase.removeChannel(channelPrintJobs)
     }
   }, [company?.id])
+
+  async function loadCounts() {
+    if (!company?.id) return
+    try {
+      // 1. Pending Job List count
+      const { count: jlCount } = await supabase
+        .from('job_list')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', company.id)
+        .neq('status', 'Converted')
+        .neq('status', 'Cancelled')
+
+      setPendingJobListCount(jlCount || 0)
+
+      // 2. Today's active Print Jobs count
+      const todayStr = new Date().toISOString().split('T')[0]
+      const { count: pjCount } = await supabase
+        .from('print_jobs')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', company.id)
+        .gte('job_date', todayStr)
+        .neq('status', 'Completed')
+        .neq('status', 'Cancelled')
+
+      setTodayPrintJobsCount(pjCount || 0)
+    } catch (err) {
+      console.error('Error loading sidebar counts:', err)
+    }
+  }
 
   async function loadNotifications() {
     try {
@@ -157,14 +214,40 @@ export default function AppLayout() {
           {hasPermission('view_jobs') && (
             <NavLink to="/jobs" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
               <Printer />
-              <span>Print Jobs</span>
+              <span style={{ flex: 1 }}>Print Jobs</span>
+              {todayPrintJobsCount > 0 && (
+                <span style={{
+                  backgroundColor: '#ef4444',
+                  color: 'white',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  padding: '2px 6px',
+                  borderRadius: '10px',
+                  lineHeight: 1
+                }}>
+                  {todayPrintJobsCount}
+                </span>
+              )}
             </NavLink>
           )}
 
           {hasPermission('view_jobs') && (
             <NavLink to="/job-list" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
               <ClipboardList />
-              <span>Job List</span>
+              <span style={{ flex: 1 }}>Job List</span>
+              {pendingJobListCount > 0 && (
+                <span style={{
+                  backgroundColor: '#2563eb',
+                  color: 'white',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  padding: '2px 6px',
+                  borderRadius: '10px',
+                  lineHeight: 1
+                }}>
+                  {pendingJobListCount}
+                </span>
+              )}
             </NavLink>
           )}
 

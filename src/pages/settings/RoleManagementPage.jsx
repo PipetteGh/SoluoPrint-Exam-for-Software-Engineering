@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { supabase } from '../../lib/supabase'
 import { ArrowLeft, Shield, Plus, X, Check, Trash2 } from 'lucide-react'
 
@@ -23,6 +24,7 @@ export default function RoleManagementPage() {
   const navigate = useNavigate()
   const { company } = useAuth()
   const { showToast } = useToast()
+  const { confirm } = useConfirm()
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -102,7 +104,14 @@ export default function RoleManagementPage() {
   }
 
   async function deleteRole(id) {
-    if (!confirm('Are you sure you want to delete this role? Users assigned to it will lose their permissions.')) return
+    const isConfirmed = await confirm({
+      title: 'Delete Role',
+      message: 'Are you sure you want to delete this role? Users assigned to it will lose their custom permissions.',
+      confirmText: 'Yes, Delete Role',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
     const { error } = await supabase.from('roles').delete().eq('id', id)
     if (error) showToast('Failed to delete role: ' + error.message, 'error')
     else {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { supabase } from '../../lib/supabase'
 import { Plus, Edit, Trash2, Search, X, FolderOpen, TrendingDown, RefreshCcw, Activity, DollarSign, Receipt } from 'lucide-react'
 
@@ -141,6 +142,8 @@ function CostCenterModal({ center, company, onClose, onSuccess }) {
 
 export default function ExpenseAccountsPage() {
   const { company } = useAuth()
+  const toast = useToast()
+  const { confirm } = useConfirm()
   const [accounts, setAccounts] = useState([])
   const [costCenters, setCostCenters] = useState([])
   const [activeTab, setActiveTab] = useState('accounts') // 'accounts' or 'centers'
@@ -149,7 +152,6 @@ export default function ExpenseAccountsPage() {
   const [showAcctModal, setShowAcctModal] = useState(false)
   const [showCcModal, setShowCcModal] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const toast = useToast()
 
   useEffect(() => { if (company) load() }, [company])
 
@@ -165,14 +167,28 @@ export default function ExpenseAccountsPage() {
   }
 
   async function deleteAccount(id) {
-    if (!confirm('Delete this account?')) return
+    const isConfirmed = await confirm({
+      title: 'Delete Expense Account',
+      message: 'Are you sure you want to delete this expense account?',
+      confirmText: 'Yes, Delete Account',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
     const { error } = await supabase.from('expense_accounts').delete().eq('id', id)
     if (error) toast.error('Failed to delete account')
     else { toast.success('Account deleted'); load() }
   }
 
   async function deleteCenter(id) {
-    if (!confirm('Delete this cost center?')) return
+    const isConfirmed = await confirm({
+      title: 'Delete Cost Center',
+      message: 'Are you sure you want to delete this cost center?',
+      confirmText: 'Yes, Delete Cost Center',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
     const { error } = await supabase.from('cost_centers').delete().eq('id', id)
     if (error) toast.error('Failed to delete center')
     else { toast.success('Cost center deleted'); load() }

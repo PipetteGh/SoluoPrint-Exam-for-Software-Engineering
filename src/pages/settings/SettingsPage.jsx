@@ -1,11 +1,12 @@
-import { useNavigate } from 'react-router-dom'
-import { Building2, Users, Shield, CreditCard, Settings, Lock, MessageSquare, Database } from 'lucide-react'
+import { useNavigate } from 'react'
+import { Building2, Users, Shield, CreditCard, Settings, Lock, MessageSquare, Database, ShieldCheck } from 'lucide-react'
 import SEO from '../../components/ui/SEO'
 
 const SETTINGS_TILES = [
   { icon: Building2, title: 'Company Profile', desc: 'Update your business information and branding', path: '/settings/company', color: '#eff6ff', iconColor: '#2563eb' },
   { icon: Users, title: 'User Management', desc: 'Manage your team members and access', path: '/settings/users', color: '#dcfce7', iconColor: '#22c55e' },
   { icon: Shield, title: 'Role Management', desc: 'Configure roles and permissions', path: '/settings/roles', color: '#fef3c7', iconColor: '#f59e0b' },
+  { icon: ShieldCheck, title: 'Audit & Activity Logs', desc: 'View security, logins, and operational trail', path: '/settings/audit-logs', color: '#f0fdf4', iconColor: '#16a34a' },
   { icon: CreditCard, title: 'Billing & Subscription', desc: 'Manage your plan and billing information', path: '/settings/billing', color: '#fee2e2', iconColor: '#ef4444' },
   { icon: Settings, title: 'Preferences', desc: 'Customize your app experience', path: '/settings/preferences', color: '#f3e8ff', iconColor: '#7c3aed' },
   { icon: Lock, title: 'Security & Authentication', desc: 'Manage password and security settings', path: '/settings/security', color: '#ecfeff', iconColor: '#0891b2' },
@@ -18,7 +19,7 @@ export default function SettingsPage() {
   const navigate = useNavigate()
   return (
     <div>
-      <SEO title="Settings" description="Configure your shop profile, manage users, roles, and system preferences." />
+      <SEO title="Settings" description="Configure your shop profile, manage users, roles, audit logs, and system preferences." />
       <div className="page-header">
         <div><h1 className="page-title">Settings</h1><p className="page-subtitle">Manage your account and preferences</p></div>
       </div>

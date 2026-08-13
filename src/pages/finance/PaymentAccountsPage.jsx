@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { supabase } from '../../lib/supabase'
 import { Wallet, Plus, Trash2, X, RefreshCcw, MoreVertical, Edit } from 'lucide-react'
 
@@ -81,12 +82,13 @@ function AccountModal({ account, company, onClose, onSuccess }) {
 
 export default function PaymentAccountsPage() {
   const { company } = useAuth()
+  const toast = useToast()
+  const { confirm } = useConfirm()
   const [accounts, setAccounts] = useState([])
   const [payments, setPayments] = useState([])
   const [showModal, setShowModal] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [loading, setLoading] = useState(true)
-  const toast = useToast()
   const [activeTab, setActiveTab] = useState('active')
   const [dateRange, setDateRange] = useState('This Year')
   const currency = company?.currency_symbol || '¢'
@@ -105,7 +107,14 @@ export default function PaymentAccountsPage() {
   }
 
   async function deleteAccount(id) {
-    if (!confirm('Delete this account? This cannot be undone.')) return
+    const isConfirmed = await confirm({
+      title: 'Delete Payment Account',
+      message: 'Are you sure you want to delete this payment account? This action cannot be undone.',
+      confirmText: 'Yes, Delete Account',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
     const { error } = await supabase.from('payment_accounts').delete().eq('id', id)
     if (error) {
       toast.error('Failed to delete account. It may be linked to payments.')

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { supabase } from '../lib/supabase'
 import { Receipt, Plus, Trash2, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { TableSkeleton, StatSkeleton } from '../components/ui/Skeletons'
@@ -13,6 +14,7 @@ export default function ExpensesPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [loading, setLoading] = useState(true)
   const toast = useToast()
+  const { confirm } = useConfirm()
 
   // Search & Pagination state
   const [searchTerm, setSearchTerm] = useState('')
@@ -112,7 +114,14 @@ export default function ExpensesPage() {
                   <td>{e.payment_accounts?.name || '-'}</td>
                   <td>
                     <button className="action-btn danger" onClick={async()=>{
-                      if(confirm('Delete?')){
+                      const isConfirmed = await confirm({
+                        title: 'Delete Expense Record',
+                        message: 'Are you sure you want to delete this expense record?',
+                        confirmText: 'Yes, Delete Expense',
+                        cancelText: 'Cancel',
+                        type: 'danger'
+                      })
+                      if(isConfirmed){
                         const { error } = await supabase.from('expenses').delete().eq('id',e.id)
                         if (error) toast.error('Failed to delete expense')
                         else {

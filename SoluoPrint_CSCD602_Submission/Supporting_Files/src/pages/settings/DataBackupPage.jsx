@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Database, Download, Upload, Server, RefreshCw } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { supabase } from '../../lib/supabase'
 import SEO from '../../components/ui/SEO'
 
@@ -10,6 +11,7 @@ export default function DataBackupPage() {
   const navigate = useNavigate()
   const { company } = useAuth()
   const toast = useToast()
+  const { confirm } = useConfirm()
   
   const [loading, setLoading] = useState(false)
   const [backupDate, setBackupDate] = useState(new Date().toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }))
@@ -19,7 +21,14 @@ export default function DataBackupPage() {
   ]
 
   async function handleBackup() {
-    if (!confirm('This will generate a full backup of all your company data. Continue?')) return
+    const isConfirmed = await confirm({
+      title: 'Generate Full Data Backup',
+      message: 'This will generate a JSON backup of all your customers, print jobs, payments, services, and expenses. Continue?',
+      confirmText: 'Yes, Backup Data',
+      cancelText: 'Cancel',
+      type: 'info'
+    })
+    if (!isConfirmed) return
     
     setLoading(true)
     try {

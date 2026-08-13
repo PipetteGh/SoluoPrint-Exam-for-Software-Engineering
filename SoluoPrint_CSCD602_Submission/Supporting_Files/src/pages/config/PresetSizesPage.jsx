@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { supabase } from '../../lib/supabase'
 import { Maximize2, Plus, Edit, Trash2, X } from 'lucide-react'
 
@@ -95,6 +96,7 @@ export default function PresetSizesPage() {
   const [editSize, setEditSize] = useState(null)
   const [loading, setLoading] = useState(true)
   const toast = useToast()
+  const { confirm } = useConfirm()
 
   useEffect(() => { if (company) load() }, [company])
 
@@ -106,7 +108,14 @@ export default function PresetSizesPage() {
   }
 
   async function deleteSize(id) {
-    if (!confirm('Delete this preset size?')) return
+    const isConfirmed = await confirm({
+      title: 'Delete Preset Size',
+      message: 'Are you sure you want to delete this preset size?',
+      confirmText: 'Yes, Delete Preset',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
     const { error } = await supabase.from('preset_sizes').delete().eq('id', id)
     if (error) toast.error('Failed to delete size')
     else { toast.success('Size deleted'); load() }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { supabase } from '../lib/supabase'
 import { useSearchParams } from 'react-router-dom'
 import { Printer, Plus, Edit, Trash2, Search, ChevronDown, ChevronLeft, ChevronRight, ArrowLeft, X, Calendar, FileText, CreditCard, HelpCircle } from 'lucide-react'
@@ -522,6 +523,8 @@ export default function PrintJobsPage() {
   const [showHelp, setShowHelp] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
+  const { confirm } = useConfirm()
+  const navigate = useNavigate()
 
   useEffect(() => { if (company) load() }, [company])
 
@@ -572,13 +575,48 @@ export default function PrintJobsPage() {
   }
 
   async function deleteJob(id) {
-    if (!confirm('Delete this job? This cannot be undone.')) return
-    const { error } = await supabase.from('print_jobs').delete().eq('id', id)
-    if (error) {
-      toast.error('Failed to delete job')
-    } else {
-      toast.success('Job deleted')
-      load()
+    const isConfirmed = await confirm({
+      title: 'Delete Print Job',
+      message: 'Are you sure you want to delete this job? Associated records will be removed. This action cannot be undone.',
+      confirmText: 'Yes, Delete Job',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
+    
+    try {
+      const targetJob = jobs.find(j => j.id === id)
+      
+      // 1. Delete associated payments if foreign key constraint exists
+      await supabase.from('payments').delete().eq('job_id', id)
+      
+      // 2. Delete associated notifications if any
+      await supabase.from('notifications').delete().eq('job_id', id)
+      
+      // 3. Delete from print_jobs
+      const { error } = await supabase.from('print_jobs').delete().eq('id', id)
+      
+      if (error) {
+        toast.error('Failed to delete job: ' + error.message)
+      } else {
+        toast.success('Job deleted successfully')
+        
+        // Audit log
+        import('../lib/auditLogger').then(({ logAudit }) => {
+          logAudit({
+            companyId: company?.id,
+            userId: profile?.id,
+            actorName: profile?.full_name || 'Admin User',
+            actorRole: profile?.role || 'Owner',
+            action: 'JOB_DELETE',
+            details: `Deleted print job ${targetJob?.job_number || id}`
+          })
+        })
+        
+        load()
+      }
+    } catch (err) {
+      toast.error('Delete error: ' + err.message)
     }
   }
 

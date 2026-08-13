@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { supabase } from '../lib/supabase'
 import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, ChevronLeft, ChevronRight, Key } from 'lucide-react'
 import SEO from '../components/ui/SEO'
@@ -19,8 +20,9 @@ function EditCustomerModal({ customer, company, onClose, onSuccess }) {
     is_active: customer.is_active !== false
   })
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [showPortalModal, setShowPortalModal] = useState(false)
   const toast = useToast()
+  const { confirm } = useConfirm()
 
   useEffect(() => {
     supabase.from('customer_types').select('*').eq('company_id', company.id).then(({ data }) => setCustomerTypes(data || []))
@@ -144,7 +146,14 @@ export default function CustomersPage() {
   }
 
   async function deleteCustomer(id) {
-    if (!confirm('Delete this customer? This cannot be undone.')) return
+    const isConfirmed = await confirm({
+      title: 'Delete Customer',
+      message: 'Are you sure you want to delete this customer? This action cannot be undone.',
+      confirmText: 'Yes, Delete Customer',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
     const { error } = await supabase.from('customers').delete().eq('id', id)
     if (error) {
       toast.error('Failed to delete customer: ' + error.message)
@@ -155,7 +164,14 @@ export default function CustomersPage() {
   }
 
   async function bulkDelete() {
-    if (!confirm(`Delete ${selectedIds.length} selected customers? This cannot be undone.`)) return
+    const isConfirmed = await confirm({
+      title: 'Bulk Delete Customers',
+      message: `Are you sure you want to delete ${selectedIds.length} selected customer(s)? This action cannot be undone.`,
+      confirmText: 'Yes, Delete Selected',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
     const { error } = await supabase.from('customers').delete().in('id', selectedIds)
     if (error) {
       toast.error('Failed to delete customers: ' + error.message)
@@ -166,7 +182,14 @@ export default function CustomersPage() {
   }
 
   async function bulkGenerateCredentials() {
-    if (!confirm(`Generate portal credentials for ${selectedIds.length} selected customers? (Existing credentials will not be overwritten)`)) return
+    const isConfirmed = await confirm({
+      title: 'Generate Portal Credentials',
+      message: `Generate portal credentials for ${selectedIds.length} selected customer(s)? Existing credentials will be preserved.`,
+      confirmText: 'Yes, Generate Credentials',
+      cancelText: 'Cancel',
+      type: 'warning'
+    })
+    if (!isConfirmed) return
     setGeneratingBulk(true)
     let generatedCount = 0
     let failedCount = 0

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
+import { ConfirmProvider } from './contexts/ConfirmContext'
 import AppLayout from './components/layout/AppLayout'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
@@ -32,6 +33,7 @@ import SecurityPage from './pages/settings/SecurityPage'
 import SmsNotificationsPage from './pages/settings/SmsNotificationsPage'
 import DataBackupPage from './pages/settings/DataBackupPage'
 import PaymentIntegrationsPage from './pages/settings/PaymentIntegrationsPage'
+import AuditLogsPage from './pages/settings/AuditLogsPage'
 import ConnectivityManager from './components/ui/ConnectivityManager'
 import ErrorBoundary from './components/ui/ErrorBoundary'
 
@@ -117,6 +119,7 @@ function AppRoutes() {
         <Route path="settings/payments" element={<PermissionRoute permission="manage_settings"><PaymentIntegrationsPage /></PermissionRoute>} />
         <Route path="settings/sms" element={<PermissionRoute permission="manage_settings"><SmsNotificationsPage /></PermissionRoute>} />
         <Route path="settings/backup" element={<PermissionRoute permission="manage_settings"><DataBackupPage /></PermissionRoute>} />
+        <Route path="settings/audit-logs" element={<PermissionRoute permission="manage_settings"><AuditLogsPage /></PermissionRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
@@ -128,12 +131,14 @@ export default function App() {
     <HelmetProvider>
       <ErrorBoundary>
         <ToastProvider>
-          <AuthProvider>
-            <BrowserRouter>
-              <AppRoutes />
-              <ConnectivityManager />
-            </BrowserRouter>
-          </AuthProvider>
+          <ConfirmProvider>
+            <AuthProvider>
+              <BrowserRouter>
+                <AppRoutes />
+                <ConnectivityManager />
+              </BrowserRouter>
+            </AuthProvider>
+          </ConfirmProvider>
         </ToastProvider>
       </ErrorBoundary>
     </HelmetProvider>

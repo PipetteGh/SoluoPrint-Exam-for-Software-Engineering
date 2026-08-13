@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { supabase } from '../lib/supabase'
 import { CreditCard, Plus, Trash2, Calendar, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import NewPaymentModal from '../components/modals/NewPaymentModal'
@@ -34,7 +36,9 @@ export default function PaymentsPage() {
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0])
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10
+  const itemsPerPage = 20
+  const toast = useToast()
+  const { confirm } = useConfirm()
 
   const reportRef = useRef(null)
   const currency = company?.currency_symbol || '¢'
@@ -368,7 +372,16 @@ export default function PaymentsPage() {
                     <td>{p.payment_accounts?.name || '-'}</td>
                     <td style={{color:'var(--text-muted)',fontSize:'12px'}}>{p.notes || '-'}</td>
                     <td>
-                      <button className="action-btn danger" onClick={async()=>{if(confirm('Delete?')){await supabase.from('payments').delete().eq('id',p.id);load()}}}>
+                      <button className="action-btn danger" onClick={async()=>{
+                        const isConfirmed = await confirm({
+                          title: 'Delete Payment Record',
+                          message: 'Are you sure you want to delete this payment record?',
+                          confirmText: 'Yes, Delete Payment',
+                          cancelText: 'Cancel',
+                          type: 'danger'
+                        })
+                        if(isConfirmed){await supabase.from('payments').delete().eq('id',p.id); toast.success('Payment deleted'); load()}
+                      }}>
                         <Trash2 size={16} />
                       </button>
                     </td>

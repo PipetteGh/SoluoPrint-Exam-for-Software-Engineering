@@ -32,6 +32,19 @@ export default function LoginPage() {
       }
 
       await finalizeCustomSignIn(profile.id)
+      
+      // Log Audit Activity
+      import('../lib/auditLogger').then(({ logAudit }) => {
+        logAudit({
+          companyId: profile.company_id,
+          userId: profile.id,
+          actorName: profile.full_name || email,
+          actorRole: profile.role || 'Admin',
+          action: 'ADMIN_LOGIN',
+          details: `User ${profile.full_name || email} logged in successfully.`
+        })
+      })
+
       setLoading(false)
       navigate('/dashboard')
     } catch (e) {

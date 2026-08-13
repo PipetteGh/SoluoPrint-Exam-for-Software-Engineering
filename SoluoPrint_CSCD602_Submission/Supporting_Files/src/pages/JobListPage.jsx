@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { supabase } from '../lib/supabase'
 import { ClipboardList, Plus, Edit, Trash2, Search, ArrowRight, ChevronLeft, ChevronRight, Eye, CheckCircle2, HelpCircle, X, Image } from 'lucide-react'
 import { TableSkeleton } from '../components/ui/Skeletons'
@@ -24,6 +25,7 @@ export default function JobListPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
   const toast = useToast()
+  const { confirm } = useConfirm()
   const navigate = useNavigate()
 
   useEffect(() => { if (company) load() }, [company])
@@ -44,7 +46,14 @@ export default function JobListPage() {
   }
 
   async function deleteItem(id) {
-    if (!confirm('Delete this job list item? This cannot be undone.')) return
+    const isConfirmed = await confirm({
+      title: 'Delete Job List Item',
+      message: 'Are you sure you want to delete this job list item? This action cannot be undone.',
+      confirmText: 'Yes, Delete Item',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
     
     // Find the item first to get image paths
     const item = items.find(i => i.id === id)

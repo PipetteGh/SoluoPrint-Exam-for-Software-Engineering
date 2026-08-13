@@ -55,12 +55,12 @@ SoluoPrint implements a comprehensive feature set demonstrating disciplined Adva
 
 ### 1. Admin Authentication & Security
 - **Dual-Provider Architecture:** Admins log in via Supabase secure authentication.
-- **Role-Based Access Control:** Protects system settings, financial reports, and administrative features from unauthorized access.
+- **Granular Role-Based Access Control (RBAC):** 18 permissions across 8 groups (Core, Customers, Jobs, Payments, Expenses, Reports, Communication, Administration) control sidebar visibility and route access. Roles include Owner, Manager, Staff, Viewer, and custom roles.
 - **Environment Variables & Secrets Management:** Securely handles API keys for SMS, Email, Payment Gateways, and Database connectivity.
 
 ### 2. Customer Portal & Dual Authentication
 - **Customer Logins & Credentials:** Customers access their own dedicated portal via custom usernames (e.g., `CUST-BENM-8564` / `r1i9kpvb`) or email address.
-- **Customer Job Intake & File Upload:** Customers submit custom print orders, enter dimensions, select categories, and upload artwork files directly to the server via `/api/upload.php`.
+- **Customer Job Intake & Dual-Pathway File Upload:** Customers submit custom print orders, enter dimensions, select categories, and upload artwork files. Uses PHP server upload in production with automatic Supabase Storage fallback. All customer-uploaded jobs are immediately visible to admins in the Print Jobs page with full CRUD (view, comment, update status, manage files).
 - **Self-Service Online Payment Checkout:** Customers can pay their outstanding balances directly from their portal dashboard using integrated digital payment gateways (Paystack, Hubtel Mobile Money, Flutterwave).
 - **Itemized Invoice & Receipt Modal:** Clicking any Job ID (e.g., `PD1001`) opens an itemized invoice/receipt showing order breakdown, formatted date & time timestamps, and a direct "Pay Online Now" checkout button.
 - **Live Customer Support Chat System:** Embedded real-time live chat widget allowing customers to communicate directly with shop staff and receive instant support.
@@ -91,6 +91,12 @@ SoluoPrint implements a comprehensive feature set demonstrating disciplined Adva
 ### 7. Core Configurations
 - **System Settings:** Dynamically configure print services, product categories, and system-wide constants.
 - **Payment Integrations Settings:** A dedicated UI allowing the admin to input API keys and Webhook URLs for Hubtel, Paystack, etc.
+
+### 8. User & Staff Management
+- **Auto-Credential Generation:** Admins can add team members with or without specifying login credentials. If email and/or password are omitted, the system auto-generates secure credentials and displays them in a success card with copy-to-clipboard.
+- **Role Assignment:** Each user is assigned a role from the Role Management page, controlling their view and access permissions.
+- **Repair Login Utility:** One-click "Repair Login" button to re-provision auth credentials for staff users whose logins are not working.
+- **Direct Profile Insert Fallback:** If Supabase Auth signup fails (e.g., email confirmation enabled), the system falls back to direct profile table insertion.
 
 ## CSCD 602 Examination Audit
 

@@ -38,6 +38,19 @@ export default function CustomerLoginPage() {
       }
 
       localStorage.setItem('soluoprint_customer_id', data.id)
+      
+      // Log Audit Activity
+      import('../lib/auditLogger').then(({ logAudit }) => {
+        logAudit({
+          companyId: data.company_id,
+          userId: data.id,
+          actorName: data.name || data.username,
+          actorRole: 'Customer',
+          action: 'CUSTOMER_LOGIN',
+          details: `Customer ${data.name} (${data.username}) logged into Customer Portal.`
+        })
+      })
+
       setLoading(false)
       navigate('/customer')
     } catch (err) {

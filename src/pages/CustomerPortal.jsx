@@ -456,7 +456,30 @@ export default function CustomerPortal() {
                             <Receipt size={14} />
                             <span>{job.job_number || 'N/A'}</span>
                           </button>
-                          {job.design_file_url && <a href={job.design_file_url} target="_blank" rel="noreferrer" style={{ marginLeft: '8px', fontSize: '12px', color: 'var(--primary)', textDecoration: 'none' }}>(File)</a>}
+                          {job.design_file_url && (
+                            <a 
+                              href={job.design_file_url} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              style={{ 
+                                marginLeft: '8px', 
+                                fontSize: '11px', 
+                                fontWeight: 600,
+                                background: '#eff6ff', 
+                                color: '#2563eb', 
+                                border: '1px solid #bfdbfe',
+                                padding: '2px 8px', 
+                                borderRadius: '12px',
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              title="View or download uploaded artwork file"
+                            >
+                              📄 Artwork
+                            </a>
+                          )}
                         </td>
                         <td>{job.category || 'General'}</td>
                         <td>{formatDateTime(job.job_date || job.created_at)}</td>
@@ -547,7 +570,30 @@ export default function CustomerPortal() {
                             <Receipt size={14} />
                             <span>{job.job_number || 'N/A'}</span>
                           </button>
-                          {job.design_file_url && <a href={job.design_file_url} target="_blank" rel="noreferrer" style={{ marginLeft: '8px', fontSize: '12px', color: 'var(--primary)', textDecoration: 'none' }}>(File)</a>}
+                          {job.design_file_url && (
+                            <a 
+                              href={job.design_file_url} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              style={{ 
+                                marginLeft: '8px', 
+                                fontSize: '11px', 
+                                fontWeight: 600,
+                                background: '#eff6ff', 
+                                color: '#2563eb', 
+                                border: '1px solid #bfdbfe',
+                                padding: '2px 8px', 
+                                borderRadius: '12px',
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              title="View or download uploaded artwork file"
+                            >
+                              📄 Artwork
+                            </a>
+                          )}
                         </td>
                         <td>{job.category || 'General'}</td>
                         <td>

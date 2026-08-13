@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Plus } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
+import { recalculateCustomerBalance } from '../../lib/balanceUtils'
 import { supabase } from '../../lib/supabase'
 import Select from 'react-select'
 import NewCustomerModal from './NewCustomerModal'
@@ -144,17 +145,11 @@ export default function NewJobModal({ onClose, onSuccess }) {
         notes: 'Initial deposit/payment upon job creation'
       })
       
-      const customer = customers.find(c => c.id === form.customer_id)
-      if (customer) {
-         const newBal = (customer.balance || 0) + finalBalance
-         await supabase.from('customers').update({ balance: newBal }).eq('id', form.customer_id)
+      if (form.customer_id) {
+        await recalculateCustomerBalance(form.customer_id)
       }
     } else if (!err && form.customer_id) {
-      const customer = customers.find(c => c.id === form.customer_id)
-      if (customer) {
-         const newBal = (customer.balance || 0) + total
-         await supabase.from('customers').update({ balance: newBal }).eq('id', form.customer_id)
-      }
+      await recalculateCustomerBalance(form.customer_id)
     }
 
     setLoading(false)

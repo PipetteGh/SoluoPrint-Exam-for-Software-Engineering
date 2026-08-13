@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
+import { recalculateCustomerBalance } from '../lib/balanceUtils'
 import { supabase } from '../lib/supabase'
 import { useSearchParams } from 'react-router-dom'
 import { Printer, Plus, Edit, Trash2, Search, ChevronDown, ChevronLeft, ChevronRight, ArrowLeft, X, Calendar, FileText, CreditCard, HelpCircle } from 'lucide-react'
@@ -184,6 +186,11 @@ function JobForm({ job, company, initialCategory, onBack, onSuccess }) {
       return 
     }
     toast.success(job ? 'Job updated' : 'Job created')
+    
+    // Recalculate customer balance with 100% financial integrity
+    if (form.customer_id) {
+      recalculateCustomerBalance(form.customer_id)
+    }
     
     // SMS Notification on update
     if (job?.id && form.status !== job.status) {
@@ -522,6 +529,8 @@ export default function PrintJobsPage() {
   const [showHelp, setShowHelp] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
+  const { confirm } = useConfirm()
+  const navigate = useNavigate()
 
   useEffect(() => { if (company) load() }, [company])
 
@@ -572,13 +581,53 @@ export default function PrintJobsPage() {
   }
 
   async function deleteJob(id) {
-    if (!confirm('Delete this job? This cannot be undone.')) return
-    const { error } = await supabase.from('print_jobs').delete().eq('id', id)
-    if (error) {
-      toast.error('Failed to delete job')
-    } else {
-      toast.success('Job deleted')
-      load()
+    const isConfirmed = await confirm({
+      title: 'Delete Print Job',
+      message: 'Are you sure you want to delete this job? Associated records will be removed. This action cannot be undone.',
+      confirmText: 'Yes, Delete Job',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
+    
+    try {
+      const targetJob = jobs.find(j => j.id === id)
+      
+      // 1. Delete associated payments if foreign key constraint exists
+      await supabase.from('payments').delete().eq('job_id', id)
+      
+      // 2. Delete associated notifications if any
+      await supabase.from('notifications').delete().eq('job_id', id)
+      
+      // 3. Delete from print_jobs
+      const { error } = await supabase.from('print_jobs').delete().eq('id', id)
+      
+      if (error) {
+        toast.error('Failed to delete job: ' + error.message)
+      } else {
+        toast.success('Job deleted successfully')
+        
+        // Recalculate customer balance after deletion
+        if (targetJob?.customer_id) {
+          await recalculateCustomerBalance(targetJob.customer_id)
+        }
+        
+        // Audit log
+        import('../lib/auditLogger').then(({ logAudit }) => {
+          logAudit({
+            companyId: company?.id,
+            userId: profile?.id,
+            actorName: profile?.full_name || 'Admin User',
+            actorRole: profile?.role || 'Owner',
+            action: 'JOB_DELETE',
+            details: `Deleted print job ${targetJob?.job_number || id}`
+          })
+        })
+        
+        load()
+      }
+    } catch (err) {
+      toast.error('Delete error: ' + err.message)
     }
   }
 
@@ -595,6 +644,7 @@ export default function PrintJobsPage() {
       // Send SMS on status change
       const job = jobs.find(j => j.id === id)
       if (job) {
+        if (job.customer_id) recalculateCustomerBalance(job.customer_id)
         const msg = `Status Update: Your job ${job.job_number} is now ${newStatus}. Thank you!`
         import('../lib/sms').then(({ notifyCustomer }) => {
           notifyCustomer(company.id, job.customer_id, 'job_completed', msg)

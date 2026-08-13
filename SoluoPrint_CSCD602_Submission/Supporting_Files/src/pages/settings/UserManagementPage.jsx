@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { supabase } from '../../lib/supabase'
 import { createClient } from '@supabase/supabase-js'
 import { ArrowLeft, Users, Plus, Trash2, UserPlus, X, CheckCircle, Key, Eye, EyeOff, Info, Copy, RefreshCw } from 'lucide-react'
@@ -25,6 +26,7 @@ export default function UserManagementPage() {
   const navigate = useNavigate()
   const { company, user: currentUser } = useAuth()
   const { showToast } = useToast()
+  const { confirm } = useConfirm()
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -56,7 +58,14 @@ export default function UserManagementPage() {
   }
 
   async function handleDeleteUser(id) {
-    if (!window.confirm('Are you sure you want to remove this user?')) return
+    const isConfirmed = await confirm({
+      title: 'Remove Team User',
+      message: 'Are you sure you want to remove this user from your company? They will lose access immediately.',
+      confirmText: 'Yes, Remove User',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
     const { error } = await supabase.from('profiles').delete().eq('id', id)
     if (error) showToast('Failed to delete user', 'error')
     else {

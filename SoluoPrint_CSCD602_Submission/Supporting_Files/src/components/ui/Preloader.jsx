@@ -7,9 +7,9 @@ export default function Preloader({ fullScreen = false, message = null, style = 
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justify: 'center',
-        padding: fullScreen ? '60px 20px' : '40px 20px',
-        minHeight: fullScreen ? '100vh' : '260px',
+        justifyContent: 'center',
+        padding: '24px',
+        minHeight: fullScreen ? '100vh' : '320px',
         width: '100%',
         backgroundColor: fullScreen ? '#ffffff' : 'transparent',
         position: fullScreen ? 'fixed' : 'relative',
@@ -18,40 +18,69 @@ export default function Preloader({ fullScreen = false, message = null, style = 
         ...style
       }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-        {/* Animated Circular Spinner Arc */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px' }}>
+        {/* Animated Brand Circular Spinner */}
         <div
           style={{
-            width: '46px',
-            height: '46px',
+            width: '54px',
+            height: '54px',
             borderRadius: '50%',
             border: '4px solid #e2e8f0',
             borderTopColor: '#2563eb',
-            borderRightColor: '#6366f1',
+            borderRightColor: '#10b981',
             animation: 'soluoSpin 0.75s linear infinite'
           }}
         />
 
-        {/* Brand Logo & Subtitle */}
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {/* Brand Logo Only (Prominent & Responsive) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', maxWidth: '85vw' }}>
           <img 
             src="/logo.png" 
-            alt="SoluoPrint" 
-            style={{ height: '38px', width: 'auto', objectFit: 'contain', marginBottom: '4px' }}
+            alt="SoluoPrint Logo" 
+            style={{ 
+              height: '75px', 
+              maxHeight: '100px', 
+              maxWidth: '280px', 
+              width: 'auto', 
+              objectFit: 'contain',
+              filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.06))'
+            }}
             onError={(e) => {
               e.target.style.display = 'none'
+              const fallback = e.target.parentElement.querySelector('.brand-logo-fallback')
+              if (fallback) fallback.style.display = 'flex'
             }}
           />
-          <div style={{ fontWeight: 800, fontSize: '18px', color: '#1e293b', letterSpacing: '-0.4px', lineHeight: 1.2 }}>
-            Soluo<span style={{ color: '#10b981' }}>Print</span>
-          </div>
-          <div style={{ fontSize: '9.5px', fontWeight: 700, color: '#64748b', letterSpacing: '1.2px', textTransform: 'uppercase', marginTop: '2px' }}>
-            PRINT MANAGEMENT SOFTWARE
+          <div 
+            className="brand-logo-fallback" 
+            style={{ 
+              display: 'none', 
+              alignItems: 'center', 
+              gap: '10px', 
+              fontWeight: 800, 
+              fontSize: '28px', 
+              color: '#1e293b', 
+              letterSpacing: '-0.5px' 
+            }}
+          >
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #2563eb, #10b981)',
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 900,
+              fontSize: '20px'
+            }}>SP</div>
+            <span>Soluo<span style={{ color: '#10b981' }}>Print</span></span>
           </div>
         </div>
 
         {message && (
-          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
+          <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 500, marginTop: '2px' }}>
             {message}
           </div>
         )}

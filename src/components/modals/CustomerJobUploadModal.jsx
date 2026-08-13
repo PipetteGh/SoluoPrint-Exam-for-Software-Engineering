@@ -4,6 +4,8 @@ import { X, Upload, File as FileIcon, XCircle } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
 import { sendSms } from '../../lib/sms'
 import { sendEmail } from '../../lib/email'
+import { logAudit } from '../../lib/auditLogger'
+import { recalculateCustomerBalance } from '../../lib/balanceUtils'
 
 export default function CustomerJobUploadModal({ onClose, onSuccess, customer }) {
   const [form, setForm] = useState({ category: 'General', notes: '', width: '', height: '', unit: 'ft', quantity: 1 })
@@ -160,6 +162,30 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer })
         .single()
 
       if (jobErr) throw jobErr
+
+      // Recalculate customer balance
+      await recalculateCustomerBalance(customer.id)
+
+      // ALSO insert into job_list so companies see it under Job List page (/job-list)
+      await supabase.from('job_list').insert({
+        company_id: customer.company_id,
+        customer_id: customer.id,
+        services: [{ name: form.category, unit_price: 0 }],
+        description: `${form.category} ${form.width && form.height ? `(${form.width}x${form.height} ${form.unit})` : ''} - Qty: ${form.quantity}`,
+        notes: form.notes || '',
+        status: 'Pending',
+        images: fileUrls
+      })
+
+      // Log Audit Activity
+      logAudit({
+        companyId: customer.company_id,
+        userId: customer.id,
+        actorName: customer.name || 'Customer',
+        actorRole: 'Customer',
+        action: 'CUSTOMER_JOB_UPLOAD',
+        details: `Uploaded new job ${jobNum} (${form.category}) with ${files.length} file(s). Notes: "${form.notes || 'None'}"`
+      })
 
       // Add a notification for the admins — they see this in the bell icon
       await supabase.from('notifications').insert({

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { supabase } from '../../lib/supabase'
 import { Plus, Trash2, X, Search, FileText, Settings, ShieldCheck, Box } from 'lucide-react'
 
@@ -107,11 +108,12 @@ const UsersIcon = ({size}) => <svg width={size} height={size} viewBox="0 0 24 24
 
 export default function ServiceCategoriesPage() {
   const { company } = useAuth()
+  const toast = useToast()
+  const { confirm } = useConfirm()
   const [categories, setCategories] = useState([])
   const [services, setServices] = useState([])
   const [showModal, setShowModal] = useState(false)
   const [editCat, setEditCat] = useState(null)
-  const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('active')
   const [search, setSearch] = useState('')
@@ -134,7 +136,14 @@ export default function ServiceCategoriesPage() {
     const msg = svcsCount > 0
       ? `This category has ${svcsCount} service(s) linked to it. Deleting it will unlink those services. Are you sure?`
       : `Delete category "${cat.name}"? This cannot be undone.`
-    if (!confirm(msg)) return
+    const isConfirmed = await confirm({
+      title: 'Delete Service Category',
+      message: msg,
+      confirmText: 'Yes, Delete Category',
+      cancelText: 'Cancel',
+      type: 'danger'
+    })
+    if (!isConfirmed) return
     const { error } = await supabase.from('service_categories').delete().eq('id', cat.id)
     if (error) toast.error('Failed to delete category')
     else {
