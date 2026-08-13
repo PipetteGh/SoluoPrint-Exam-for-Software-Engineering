@@ -1,6 +1,6 @@
-import { X, Printer } from 'lucide-react'
+import { X, Printer, CreditCard } from 'lucide-react'
 
-export default function ReceiptModal({ job, company, onClose }) {
+export default function ReceiptModal({ job, company, onClose, onPay, gatewaysActive }) {
   function handlePrint() {
     window.print()
   }
@@ -40,8 +40,13 @@ export default function ReceiptModal({ job, company, onClose }) {
     <div className="modal-overlay print-modal-overlay">
       <div className="modal modal-lg receipt-modal">
         <div className="modal-header no-print">
-          <h2 className="modal-title">Receipt / Invoice</h2>
-          <div style={{display:'flex', gap:'10px'}}>
+          <h2 className="modal-title">Receipt / Invoice #{job.job_number}</h2>
+          <div style={{display:'flex', gap:'10px', alignItems: 'center'}}>
+             {Number(job.balance) > 0 && onPay && (
+               <button className="btn btn-success" onClick={() => onPay(job)} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#10b981', color: 'white', border: 'none' }}>
+                 <CreditCard size={16} /> Pay Online Now ({currency}{Number(job.balance).toFixed(2)})
+               </button>
+             )}
              <button className="btn btn-primary" onClick={handlePrint}><Printer size={16}/> Print</button>
              <button className="modal-close" onClick={onClose}><X /></button>
           </div>
