@@ -35,23 +35,24 @@ import PaymentIntegrationsPage from './pages/settings/PaymentIntegrationsPage'
 import ConnectivityManager from './components/ui/ConnectivityManager'
 import ErrorBoundary from './components/ui/ErrorBoundary'
 
+import Preloader from './components/ui/Preloader'
 import { HelmetProvider } from 'react-helmet-async'
 
 function PrivateRoute({ children }) {
   const { profile, loading } = useAuth()
-  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>
+  if (loading) return <Preloader fullScreen />
   return profile ? children : <Navigate to="/login" replace />
 }
 
 function PublicRoute({ children }) {
   const { profile, loading } = useAuth()
-  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>
+  if (loading) return <Preloader fullScreen />
   return profile ? <Navigate to="/dashboard" replace /> : children
 }
 
 function PermissionRoute({ children, permission }) {
   const { profile, loading, hasPermission } = useAuth()
-  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>
+  if (loading) return <Preloader fullScreen />
   if (!profile) return <Navigate to="/login" replace />
   if (!hasPermission(permission)) return <Navigate to="/dashboard" replace />
   return children

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { X, CreditCard, Smartphone, CheckCircle } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
+import Preloader from '../ui/Preloader'
 
 export default function CustomerPaymentModal({ onClose, onSuccess, customer, balance, job }) {
   const [amount, setAmount] = useState(job ? job.balance : (balance || 0))
@@ -133,8 +134,8 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
 
   if (loading) return (
     <div className="modal-overlay" style={{ zIndex: 1100, backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)' }}>
-      <div className="modal-content" style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)' }}>
-        <div className="spinner"></div>
+      <div className="modal-content" style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)', maxWidth: '400px', width: '90%' }}>
+        <Preloader />
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Save, AlertCircle, Eye, EyeOff, ShieldCheck, CreditCard, Smartphone, Zap } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
+import Preloader from '../../components/ui/Preloader'
 import SEO from '../../components/ui/SEO'
 
 export default function PaymentIntegrationsPage() {
@@ -131,7 +132,7 @@ export default function PaymentIntegrationsPage() {
     }
   }
 
-  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>
+  if (loading) return <Preloader fullScreen />
 
   return (
     <div style={{ width: '100%', maxWidth: '100%', padding: '8px 0' }}>

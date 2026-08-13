@@ -9,6 +9,7 @@ import CustomerPaymentModal from '../components/modals/CustomerPaymentModal'
 import ReceiptModal from '../components/modals/ReceiptModal'
 import SupportChatWidget from '../components/chat/SupportChatWidget'
 import OnboardingTour from '../components/ui/OnboardingTour'
+import Preloader from '../components/ui/Preloader'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
   PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler
@@ -250,7 +251,7 @@ export default function CustomerPortal() {
   }, [jobs])
 
   // ---- NOW the loading guard ----
-  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>
+  if (loading) return <Preloader fullScreen />
 
   // Render different tabs
   const renderContent = () => {
