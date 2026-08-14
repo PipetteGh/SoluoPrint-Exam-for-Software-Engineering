@@ -194,7 +194,7 @@ export default function CustomersPage() {
   }
 
   async function sendCredentials(customer, username, password) {
-    const loginUrl = window.location.origin + '/login'
+    const loginUrl = window.location.origin + '/customer-login'
     
     // Send SMS
     if (customer.phone) {
@@ -211,17 +211,75 @@ export default function CustomersPage() {
     if (customer.email) {
       try {
         const { sendEmail } = await import('../lib/email')
+        const emailHtml = `
+          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; padding: 40px 20px; max-width: 600px; margin: 0 auto; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
+            <!-- Header -->
+            <div style="text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px;">
+              <div style="display: inline-block; background: linear-gradient(135deg, #2563eb, #10b981); color: white; padding: 12px 24px; border-radius: 8px; font-weight: 800; font-size: 24px; letter-spacing: -0.5px;">
+                ${company?.name || 'SoluoPrint'}
+              </div>
+            </div>
+            
+            <!-- Greeting -->
+            <p style="font-size: 16px; color: #334155; line-height: 1.6; margin-bottom: 20px;">
+              Hello <b>${customer.name}</b>,
+            </p>
+            
+            <p style="font-size: 16px; color: #334155; line-height: 1.6; margin-bottom: 24px;">
+              Welcome to our print shop! We are excited to have you on board. Contact us for all your printing needs.
+            </p>
+            
+            <p style="font-size: 16px; color: #334155; line-height: 1.6; margin-bottom: 24px;">
+              You can now access your dedicated **Customer Portal** to upload artworks, view job statistics, track order history, and pay outstanding balances online.
+            </p>
+            
+            <!-- Credentials Box -->
+            <div style="background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 24px; margin-bottom: 30px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
+              <h3 style="margin-top: 0; color: #1e293b; font-size: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">Portal Login Details</h3>
+              
+              <div style="margin-bottom: 12px;">
+                <span style="color: #64748b; font-size: 14px; display: block; margin-bottom: 4px;">Portal Link</span>
+                <a href="${loginUrl}" style="color: #2563eb; font-weight: 600; text-decoration: none; font-size: 15px; word-break: break-all;">${loginUrl}</a>
+              </div>
+              
+              <div style="margin-bottom: 12px; display: inline-block; width: 48%;">
+                <span style="color: #64748b; font-size: 14px; display: block; margin-bottom: 4px;">Username</span>
+                <code style="background-color: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-weight: 700; color: #0f172a; font-size: 15px; font-family: monospace;">${username}</code>
+              </div>
+              
+              <div style="display: inline-block; width: 48%;">
+                <span style="color: #64748b; font-size: 14px; display: block; margin-bottom: 4px;">Password</span>
+                <code style="background-color: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-weight: 700; color: #0f172a; font-size: 15px; font-family: monospace;">${password}</code>
+              </div>
+            </div>
+            
+            <!-- Button Link -->
+            <div style="text-align: center; margin-bottom: 30px;">
+              <a href="${loginUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 30px; border-radius: 6px; font-weight: 700; text-decoration: none; font-size: 16px; display: inline-block; transition: background-color 0.2s;">
+                Go to Customer Portal
+              </a>
+            </div>
+            
+            <!-- Footer -->
+            <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 13px; color: #64748b; line-height: 1.5; text-align: center;">
+              Regards,<br>
+              <b>${company?.name || 'SoluoPrint'}</b><br>
+              Phone: ${company?.phone || 'N/A'}<br>
+              <div style="margin-top: 12px; font-size: 11px; color: #94a3b8;">Powered by: Soluotech</div>
+            </div>
+          </div>
+        `
         await sendEmail(
            customer.email, 
            'Your Customer Portal Credentials', 
-           `<p>Welcome to ${company?.name || 'SoluoPrint'}!</p><p>You can track your print jobs and bills in our customer portal.</p><p>Login at: <a href="${loginUrl}">${loginUrl}</a></p><p>Username: <b>${username}</b></p><p>Password: <b>${password}</b></p>`,
+           emailHtml,
            company?.name || 'SoluoPrint'
         )
       } catch (e) {
         console.error('Failed to send welcome email', e)
       }
     }
-    
+  }  
     // Create In-App Notification
     try {
       await supabase.from('notifications').insert({
