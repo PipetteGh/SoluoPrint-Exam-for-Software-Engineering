@@ -160,10 +160,13 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
       }
 
       function triggerPaystack() {
+        const fee = parseFloat(amount) * 0.015
+        const totalCharge = parseFloat(amount) + fee
+
         const handler = window.PaystackPop.setup({
           key: gateways.paystackKey,
           email: customer.email || 'customer@soluoprint.com',
-          amount: Math.round(parseFloat(amount) * 100), // convert to smallest currency unit (pesewas/cents)
+          amount: Math.round(totalCharge * 100), // convert to smallest currency unit (pesewas/cents)
           currency: customer?.companies?.currency || 'GHS',
           ref: 'SP_' + Math.floor((Math.random() * 1000000000) + 1),
           callback: function(response) {
@@ -222,13 +225,16 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
 
         // Call server-side proxy to initiate Hubtel checkout (avoids CORS)
         const baseUrl = window.location.origin
+        const fee = parseFloat(amount) * 0.015
+        const totalCharge = parseFloat(amount) + fee
+
         const response = await fetch(`${baseUrl}/api/hubtel/initiate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             clientId: gateways.hubtelClientId,
             clientSecret: gateways.hubtelClientSecret,
-            totalAmount: parseFloat(amount),
+            totalAmount: totalCharge,
             title: `Payment to ${customer?.companies?.name || 'Shop'}`,
             description: job ? `Payment for Job #${job.job_number}` : 'Outstanding Balance Payment',
             clientReference: reference,
@@ -341,13 +347,30 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
                   </span>
                 </div>
               </div>
+
+              {amount > 0 && (
+                <div style={{ marginTop: '16px', padding: '12px 16px', backgroundColor: '#f1f5f9', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px', color: '#64748b' }}>
+                    <span>Amount</span>
+                    <span>{currency}{parseFloat(amount).toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', color: '#64748b' }}>
+                    <span>Processing Fee (1.5%)</span>
+                    <span>{currency}{(parseFloat(amount) * 0.015).toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+                    <span>Total Charge</span>
+                    <span>{currency}{(parseFloat(amount) * 1.015).toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
           <div className="modal-footer" style={{ marginTop: '28px', paddingTop: '16px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={processing} style={{ borderRadius: '8px', padding: '10px 18px' }}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={processing || !hasGateways} style={{ backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', padding: '10px 22px', fontWeight: 600 }}>
-              {processing ? 'Processing Payment...' : `Pay ${currency}${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              {processing ? 'Processing Payment...' : `Pay ${currency}${(Number(amount) * 1.015).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </button>
           </div>
         </form>

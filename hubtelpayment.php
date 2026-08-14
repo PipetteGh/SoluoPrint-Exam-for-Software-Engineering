@@ -7,9 +7,9 @@ header('Content-Type: application/json');
 // =========================================================================
 // CONFIGURATION - Replace these with your actual Hubtel credentials for testing
 // =========================================================================
-$clientId = 'YOUR_CLIENT_ID';
-$clientSecret = 'YOUR_CLIENT_SECRET';
-$merchantAccountNumber = 'YOUR_MERCHANT_ACCOUNT_NUMBER';
+$clientId = 'wl0nmz';
+$clientSecret = '338674d5f67b440d98cf9318b65f6081';
+$merchantAccountNumber = '2039635';
 
 // The Authorization header uses Base64 encoded 'clientId:clientSecret'
 $authBase64 = base64_encode($clientId . ':' . $clientSecret);
@@ -26,8 +26,8 @@ if ($action === 'initiate') {
     $clientReference = 'test_inv_' . time();
     
     $payload = array(
-        "totalAmount" => 1.50, // Must be float / 2 decimal places
-        "description" => "Test Payment from PHP",
+        "totalAmount" => 1.00, // Must be float / 2 decimal places
+        "description" => "1 Cedi Live Payment Test",
         "title" => "SoluoPrint Test", // Hubtel sometimes requires this based on older docs, good to include
         "callbackUrl" => "https://webhook.site/your-webhook-uuid", // Change to a real webhook site to inspect callback
         "returnUrl" => "http://localhost/hubtelpayment.php?action=status&ref=" . $clientReference,

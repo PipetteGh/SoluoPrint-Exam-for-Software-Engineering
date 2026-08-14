@@ -287,10 +287,9 @@ export default function CustomerPortal() {
     // Clean URL immediately so refreshes don't re-trigger
     window.history.replaceState({}, document.title, window.location.pathname)
 
-    if (hubtelStatus === 'cancelled') {
-      showToast('Payment was cancelled.', 'info')
-      return
-    }
+    // Don't immediately return on 'cancelled' - we will still check the API status
+    // because sometimes Momo payments succeed after the user has been redirected to cancelUrl.
+    const isCancelledRedirect = hubtelStatus === 'cancelled'
 
     // Retrieve pending payment info from localStorage
     const pendingKey = `hubtel_pending_${hubtelRef}`
@@ -310,7 +309,7 @@ export default function CustomerPortal() {
         // Fetch Hubtel credentials from the gateway settings
         const { data: gwData } = await supabase
           .from('payment_gateways')
-          .select('hubtel_client_id, hubtel_client_secret')
+          .select('hubtel_client_id, hubtel_client_secret, hubtel_merchant_account_number')
           .eq('company_id', pending.companyId)
           .single()
 
@@ -329,7 +328,7 @@ export default function CustomerPortal() {
           try {
             const baseUrl = window.location.origin
             const statusRes = await fetch(
-              `${baseUrl}/api/hubtel/status?clientId=${encodeURIComponent(gwData.hubtel_client_id)}&clientSecret=${encodeURIComponent(gwData.hubtel_client_secret)}&clientReference=${encodeURIComponent(hubtelRef)}`
+              `${baseUrl}/api/hubtel/status?clientId=${encodeURIComponent(gwData.hubtel_client_id)}&clientSecret=${encodeURIComponent(gwData.hubtel_client_secret)}&merchantAccountNumber=${encodeURIComponent(gwData.hubtel_merchant_account_number)}&clientReference=${encodeURIComponent(hubtelRef)}`
             )
             const statusResult = await statusRes.json()
 
@@ -351,8 +350,14 @@ export default function CustomerPortal() {
         }
 
         if (!verified) {
-          // If still not verified after polling, process optimistically since Hubtel confirmed returnUrl
-          showToast('Payment verification is taking longer than expected. Processing your payment...', 'info')
+          if (isCancelledRedirect) {
+            showToast('Payment was cancelled or expired.', 'error')
+            localStorage.removeItem(pendingKey)
+            return
+          } else {
+            // If still not verified after polling, process optimistically since Hubtel confirmed returnUrl
+            showToast('Payment verification is taking longer than expected. Processing your payment...', 'info')
+          }
         }
 
         // Process the payment in the backend

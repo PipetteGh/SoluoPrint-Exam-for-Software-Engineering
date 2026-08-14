@@ -245,15 +245,17 @@ const hubtelPlugin = () => {
               const clientId = url.searchParams.get('clientId')
               const clientSecret = url.searchParams.get('clientSecret')
               const clientReference = url.searchParams.get('clientReference')
+              const merchantAccountNumber = url.searchParams.get('merchantAccountNumber')
 
-              if (!clientId || !clientSecret || !clientReference) {
+              if (!clientId || !clientSecret || !clientReference || !merchantAccountNumber) {
                 res.statusCode = 400
                 res.setHeader('Content-Type', 'application/json')
                 return res.end(JSON.stringify({ success: false, error: 'Missing required parameters' }))
               }
 
               const authHeader = 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
-              const statusUrl = `https://payproxyapi.hubtel.com/items/${encodeURIComponent(clientReference)}/status`
+              // The status check endpoint uses a different base URL and path format according to Hubtel docs
+              const statusUrl = `https://api-txnstatus.hubtel.com/transactions/${encodeURIComponent(merchantAccountNumber)}/status?clientReference=${encodeURIComponent(clientReference)}`
 
               const response = await fetch(statusUrl, {
                 method: 'GET',
