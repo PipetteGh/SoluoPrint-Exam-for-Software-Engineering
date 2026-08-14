@@ -279,7 +279,7 @@ export default function CustomersPage() {
         console.error('Failed to send welcome email', e)
       }
     }
-  }  
+    
     // Create In-App Notification
     try {
       await supabase.from('notifications').insert({
