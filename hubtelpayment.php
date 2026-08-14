@@ -16,7 +16,9 @@ $authBase64 = base64_encode($clientId . ':' . $clientSecret);
 $authHeader = 'Authorization: Basic ' . $authBase64;
 
 // Basic routing using query parameters (e.g., ?action=initiate or ?action=status&ref=inv0012)
-$action = isset($_GET['action']) ? $_GET['action'] : 'initiate';
+$action = 'status';
+$ref = 'test_inv_1786708189'; // A previous ref I generated
+$_GET['ref'] = $ref;
 
 if ($action === 'initiate') {
     // 1. INITIATE CHECKOUT

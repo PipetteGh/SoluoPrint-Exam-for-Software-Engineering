@@ -318,9 +318,9 @@ export default function CustomerPortal() {
           return
         }
 
-        // Poll status up to 6 times (every 5 seconds = 30 seconds total)
+        // Poll status up to 3 times (to avoid making the user wait too long if Hubtel drops packets)
         let verified = false
-        for (let attempt = 0; attempt < 6; attempt++) {
+        for (let attempt = 0; attempt < 3; attempt++) {
           if (attempt > 0) {
             await new Promise(r => setTimeout(r, 5000))
           }
@@ -332,8 +332,11 @@ export default function CustomerPortal() {
             )
             const statusResult = await statusRes.json()
 
-            // Hubtel returns status in data.status or data.data.status
-            const paymentStatus = statusResult.data?.data?.status || statusResult.data?.status || ''
+            // Hubtel sometimes returns PascalCase (Data, Status) and sometimes camelCase (data, status)
+            const rootStatus = statusResult.data?.status || statusResult.data?.Status || ''
+            const nestedStatus = statusResult.data?.data?.status || statusResult.data?.data?.Status || statusResult.data?.Data?.Status || statusResult.data?.Data?.status || ''
+            
+            const paymentStatus = nestedStatus || rootStatus
             
             if (paymentStatus.toLowerCase() === 'paid' || paymentStatus.toLowerCase() === 'success') {
               verified = true
@@ -620,6 +623,11 @@ export default function CustomerPortal() {
                   <div className="stat-value" style={{ color: Number(customer?.balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
                     {currency} {formatMoney(customer?.balance)}
                   </div>
+                  {Number(customer?.credit_balance) > 0 && (
+                    <div style={{ fontSize: '12px', color: '#059669', fontWeight: 600, marginTop: '4px' }}>
+                      + {currency} {formatMoney(customer?.credit_balance)} Credit Available
+                    </div>
+                  )}
                 </div>
               </div>
               {Number(customer.balance) > 0 && gatewaysActive && (

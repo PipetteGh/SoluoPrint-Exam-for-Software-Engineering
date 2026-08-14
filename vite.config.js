@@ -257,10 +257,15 @@ const hubtelPlugin = () => {
               // The status check endpoint uses a different base URL and path format according to Hubtel docs
               const statusUrl = `https://api-txnstatus.hubtel.com/transactions/${encodeURIComponent(merchantAccountNumber)}/status?clientReference=${encodeURIComponent(clientReference)}`
 
+              const controller = new AbortController()
+              const timeoutId = setTimeout(() => controller.abort(), 5000)
+
               const response = await fetch(statusUrl, {
                 method: 'GET',
-                headers: { 'Authorization': authHeader }
+                headers: { 'Authorization': authHeader },
+                signal: controller.signal
               })
+              clearTimeout(timeoutId)
 
               const rawText = await response.text()
               let result = {}
