@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { X, Upload, File as FileIcon, XCircle, Loader2, Plus, FileText, CheckSquare, Square } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
-import { sendSms } from '../../lib/sms'
+import { sendSms, notifyCustomer } from '../../lib/sms'
 import { sendEmail } from '../../lib/email'
 import { logAudit } from '../../lib/auditLogger'
 import { recalculateCustomerBalance } from '../../lib/balanceUtils'
@@ -386,6 +386,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
           ])
 
           if (companyData) {
+            // 1. Alert Company (Admin)
             if (companyData.phone && smsSettings) {
               const alertText = `Alert: ${customer.name} has uploaded a new ${capturedCategory} job to your Job List with ${capturedFileCount} artwork file(s).`
               sendSms(companyData.phone, alertText, smsSettings).catch(console.error)
@@ -394,12 +395,60 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
             if (companyData.email) {
               const emailSubject = `[SoluoPrint] New Job List Upload from ${customer.name}`
               const emailHtml = `
-                <h2>New Artwork Upload Received</h2>
-                <p><strong>Customer:</strong> ${customer.name}</p>
-                <p><strong>Category:</strong> ${capturedCategory}</p>
-                <p><strong>Files Uploaded:</strong> ${capturedFileCount} artwork file(s)</p>
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; padding: 40px 20px; max-width: 600px; margin: 0 auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                  <div style="text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px;">
+                    <img src="${companyData.logo_url || (window.location.origin + '/logo.png')}" alt="Logo" style="max-height: 50px; width: auto; margin-bottom: 10px;" onerror="this.style.display='none'" />
+                    <div style="font-size: 20px; font-weight: 800; color: #1e293b; letter-spacing: -0.5px;">New Artwork Upload Received</div>
+                  </div>
+                  <p style="font-size: 15px; color: #334155; line-height: 1.6;">
+                    Hello admin, a new artwork job upload has been submitted.
+                  </p>
+                  <div style="background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+                    <p style="margin: 0 0 10px 0;"><strong>Customer:</strong> ${customer.name}</p>
+                    <p style="margin: 0 0 10px 0;"><strong>Description:</strong> ${capturedDescription || capturedCategory}</p>
+                    <p style="margin: 0;"><strong>Files Uploaded:</strong> ${capturedFileCount} file(s)</p>
+                  </div>
+                  <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; color: #64748b; text-align: center;">
+                    Regards,<br><b>SoluoPrint System</b>
+                  </div>
+                </div>
               `
               sendEmail(companyData.email, emailSubject, emailHtml, companyData.name || 'SoluoPrint Alerts').catch(console.error)
+            }
+
+            // 2. Alert Customer (Confirmation)
+            if (customer.phone) {
+              const customerSmsText = `we have received your job upload for "${capturedCategory}". We will review and convert it shortly. Thank you!`
+              notifyCustomer(customer.company_id, customer.id, 'job_created', customerSmsText).catch(console.error)
+            }
+
+            if (customer.email) {
+              const customerEmailSubject = `Artwork Upload Confirmation`
+              const customerEmailHtml = `
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; padding: 40px 20px; max-width: 600px; margin: 0 auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                  <div style="text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px;">
+                    <img src="${companyData.logo_url || (window.location.origin + '/logo.png')}" alt="Logo" style="max-height: 50px; width: auto; margin-bottom: 10px;" onerror="this.style.display='none'" />
+                    <div style="font-size: 20px; font-weight: 800; color: #1e293b; letter-spacing: -0.5px;">Artwork Upload Received</div>
+                  </div>
+                  <p style="font-size: 15px; color: #334155; line-height: 1.6;">
+                    Hello <b>${customer.name}</b>,
+                  </p>
+                  <p style="font-size: 15px; color: #334155; line-height: 1.6;">
+                    Thank you for uploading your artwork to <b>${companyData.name || 'our shop'}</b>. We have successfully received it and our team will review it shortly.
+                  </p>
+                  <div style="background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+                    <p style="margin: 0 0 10px 0;"><strong>Job:</strong> ${capturedDescription || capturedCategory}</p>
+                    <p style="margin: 0;"><strong>Files Uploaded:</strong> ${capturedFileCount} file(s)</p>
+                  </div>
+                  <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; color: #64748b; text-align: center;">
+                    Regards,<br>
+                    <b>${companyData.name || 'Print Shop'} Team</b><br>
+                    Phone: ${companyData.phone || 'N/A'}<br>
+                    <div style="margin-top: 10px; font-size: 11px; color: #94a3b8;">Powered by: Soluotech</div>
+                  </div>
+                </div>
+              `
+              sendEmail(customer.email, customerEmailSubject, customerEmailHtml, companyData.name || 'SoluoPrint Alerts').catch(console.error)
             }
           }
         } catch (e) {

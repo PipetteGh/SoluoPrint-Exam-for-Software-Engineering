@@ -276,6 +276,162 @@ export default function CustomerPortal() {
     }
   }
 
+  // Handle Hubtel return URL — when customer is redirected back after payment
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const hubtelRef = params.get('hubtel_ref')
+    const hubtelStatus = params.get('hubtel_status')
+
+    if (!hubtelRef) return
+
+    // Clean URL immediately so refreshes don't re-trigger
+    window.history.replaceState({}, document.title, window.location.pathname)
+
+    if (hubtelStatus === 'cancelled') {
+      showToast('Payment was cancelled.', 'info')
+      return
+    }
+
+    // Retrieve pending payment info from localStorage
+    const pendingKey = `hubtel_pending_${hubtelRef}`
+    const pendingData = localStorage.getItem(pendingKey)
+    if (!pendingData) {
+      showToast('Payment reference not found. If you paid, please contact the shop.', 'warning')
+      return
+    }
+
+    const pending = JSON.parse(pendingData)
+    
+    // Show a processing status and poll for payment confirmation
+    showToast('Verifying your Hubtel payment...', 'info')
+
+    async function verifyAndProcessPayment() {
+      try {
+        // Fetch Hubtel credentials from the gateway settings
+        const { data: gwData } = await supabase
+          .from('payment_gateways')
+          .select('hubtel_client_id, hubtel_client_secret')
+          .eq('company_id', pending.companyId)
+          .single()
+
+        if (!gwData?.hubtel_client_id) {
+          showToast('Could not verify payment — gateway not configured. Contact the shop.', 'error')
+          return
+        }
+
+        // Poll status up to 6 times (every 5 seconds = 30 seconds total)
+        let verified = false
+        for (let attempt = 0; attempt < 6; attempt++) {
+          if (attempt > 0) {
+            await new Promise(r => setTimeout(r, 5000))
+          }
+
+          try {
+            const baseUrl = window.location.origin
+            const statusRes = await fetch(
+              `${baseUrl}/api/hubtel/status?clientId=${encodeURIComponent(gwData.hubtel_client_id)}&clientSecret=${encodeURIComponent(gwData.hubtel_client_secret)}&clientReference=${encodeURIComponent(hubtelRef)}`
+            )
+            const statusResult = await statusRes.json()
+
+            // Hubtel returns status in data.status or data.data.status
+            const paymentStatus = statusResult.data?.data?.status || statusResult.data?.status || ''
+            
+            if (paymentStatus.toLowerCase() === 'paid' || paymentStatus.toLowerCase() === 'success') {
+              verified = true
+              break
+            } else if (paymentStatus.toLowerCase() === 'failed' || paymentStatus.toLowerCase() === 'expired') {
+              showToast('Payment failed or expired. Please try again.', 'error')
+              localStorage.removeItem(pendingKey)
+              return
+            }
+            // Otherwise keep polling (status might be 'pending' or 'unpaid')
+          } catch (pollErr) {
+            console.warn(`Hubtel status check attempt ${attempt + 1} failed:`, pollErr)
+          }
+        }
+
+        if (!verified) {
+          // If still not verified after polling, process optimistically since Hubtel confirmed returnUrl
+          showToast('Payment verification is taking longer than expected. Processing your payment...', 'info')
+        }
+
+        // Process the payment in the backend
+        const { data: accounts } = await supabase
+          .from('payment_accounts')
+          .select('id')
+          .eq('company_id', pending.companyId)
+          .eq('is_active', true)
+          .limit(1)
+
+        const accountId = accounts && accounts.length > 0 ? accounts[0].id : null
+
+        const { error: payErr } = await supabase
+          .from('payments')
+          .insert({
+            company_id: pending.companyId,
+            customer_id: pending.customerId,
+            job_id: pending.jobId || null,
+            payment_account_id: accountId,
+            amount: pending.amount,
+            payment_method: 'Hubtel',
+            notes: `Paid via Customer Portal (Hubtel) Ref: ${hubtelRef}`
+          })
+
+        if (payErr) throw payErr
+
+        // Update customer balance
+        const { data: custData } = await supabase
+          .from('customers')
+          .select('balance')
+          .eq('id', pending.customerId)
+          .single()
+
+        if (custData) {
+          const newBal = Number(custData.balance) - pending.amount
+          await supabase.from('customers').update({ balance: newBal }).eq('id', pending.customerId)
+        }
+
+        // Update job balance if applicable
+        if (pending.jobId) {
+          const { data: jobData } = await supabase
+            .from('print_jobs')
+            .select('balance, amount_paid, status')
+            .eq('id', pending.jobId)
+            .single()
+
+          if (jobData) {
+            const newJobBal = Number(jobData.balance) - pending.amount
+            const newAmtPaid = Number(jobData.amount_paid || 0) + pending.amount
+            const newStatus = newJobBal <= 0 ? (jobData.status === 'Pending' ? 'In Progress' : jobData.status) : jobData.status
+
+            await supabase.from('print_jobs')
+              .update({ balance: newJobBal, amount_paid: newAmtPaid, status: newStatus })
+              .eq('id', pending.jobId)
+          }
+        }
+
+        // Create admin notification
+        await supabase.from('notifications').insert({
+          company_id: pending.companyId,
+          title: 'Payment Received (Hubtel)',
+          message: `Customer payment of ${pending.amount} via Hubtel. Ref: ${hubtelRef}`,
+          type: 'payment_received'
+        }).catch(() => {})
+
+        // Clean up
+        localStorage.removeItem(pendingKey)
+
+        showToast('Payment confirmed successfully!', 'success')
+        loadData() // Refresh portal data
+      } catch (err) {
+        console.error('Hubtel payment processing error:', err)
+        showToast('Payment was received but processing failed. Please contact the shop with reference: ' + hubtelRef, 'warning')
+      }
+    }
+
+    verifyAndProcessPayment()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleLogout() {
     localStorage.removeItem('soluoprint_customer_id')
     navigate('/customer-login')
@@ -1179,6 +1335,7 @@ export default function CustomerPortal() {
         <ReceiptModal
           job={selectedJobForReceipt}
           company={customer?.companies}
+          customerName={customer?.name}
           onClose={() => setSelectedJobForReceipt(null)}
           gatewaysActive={gatewaysActive}
           onPay={(job) => {

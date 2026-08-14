@@ -1,6 +1,6 @@
 import { X, Printer, CreditCard } from 'lucide-react'
 
-export default function ReceiptModal({ job, company, onClose, onPay, gatewaysActive }) {
+export default function ReceiptModal({ job, company, onClose, onPay, gatewaysActive, customerName }) {
   function handlePrint() {
     window.print()
   }
@@ -86,7 +86,7 @@ export default function ReceiptModal({ job, company, onClose, onPay, gatewaysAct
            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'30px'}}>
              <div>
                <h3 style={{fontSize:'12px', color:'#666', marginBottom:'4px', textTransform:'uppercase'}}>Billed To:</h3>
-               <p style={{margin:0, fontWeight:600, fontSize:'16px'}}>{job.customers?.name}</p>
+               <p style={{margin:0, fontWeight:600, fontSize:'16px'}}>{job.customers?.name || customerName || 'Walk-in Customer'}</p>
              </div>
              <div style={{textAlign:'right'}}>
                <h3 style={{fontSize:'12px', color:'#666', marginBottom:'4px', textTransform:'uppercase'}}>Tendered By:</h3>

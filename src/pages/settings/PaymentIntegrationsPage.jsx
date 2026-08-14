@@ -18,7 +18,6 @@ export default function PaymentIntegrationsPage() {
     flutterwave: false
   })
   
-  const [rowId, setRowId] = useState(null)
   const [settings, setSettings] = useState({
     paystack_active: false,
     paystack_public_key: '',
@@ -26,6 +25,7 @@ export default function PaymentIntegrationsPage() {
     hubtel_active: false,
     hubtel_client_id: '',
     hubtel_client_secret: '',
+    hubtel_merchant_account_number: '',
     flutterwave_active: false,
     flutterwave_public_key: '',
     flutterwave_secret_key: ''
@@ -46,7 +46,6 @@ export default function PaymentIntegrationsPage() {
       if (err) {
         console.error(err)
       } else if (data) {
-        setRowId(data.id)
         setSettings({
           paystack_active: data.paystack_active || false,
           paystack_public_key: data.paystack_public_key || '',
@@ -54,6 +53,7 @@ export default function PaymentIntegrationsPage() {
           hubtel_active: data.hubtel_active || false,
           hubtel_client_id: data.hubtel_client_id || '',
           hubtel_client_secret: data.hubtel_client_secret || '',
+          hubtel_merchant_account_number: data.hubtel_merchant_account_number || '',
           flutterwave_active: data.flutterwave_active || false,
           flutterwave_public_key: data.flutterwave_public_key || '',
           flutterwave_secret_key: data.flutterwave_secret_key || ''
@@ -68,7 +68,20 @@ export default function PaymentIntegrationsPage() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
-    setSettings(s => ({ ...s, [name]: type === 'checkbox' ? checked : value }))
+    if (type === 'checkbox') {
+      if (checked) {
+        setSettings(s => ({
+          ...s,
+          paystack_active: name === 'paystack_active',
+          hubtel_active: name === 'hubtel_active',
+          flutterwave_active: name === 'flutterwave_active'
+        }))
+      } else {
+        setSettings(s => ({ ...s, [name]: false }))
+      }
+    } else {
+      setSettings(s => ({ ...s, [name]: value }))
+    }
   }
 
   const toggleSecret = (key) => {
@@ -87,39 +100,26 @@ export default function PaymentIntegrationsPage() {
     }
 
     try {
-      if (rowId) {
+      // Check if row already exists for company_id first
+      const { data: existing } = await supabase
+        .from('payment_gateways')
+        .select('company_id')
+        .eq('company_id', company.id)
+        .maybeSingle()
+
+      if (existing) {
         const { error: updateErr } = await supabase
           .from('payment_gateways')
           .update(payload)
-          .eq('id', rowId)
+          .eq('company_id', company.id)
 
         if (updateErr) throw updateErr
       } else {
-        // Check if row already exists for company_id first
-        const { data: existing } = await supabase
+        const { error: insertErr } = await supabase
           .from('payment_gateways')
-          .select('id')
-          .eq('company_id', company.id)
-          .maybeSingle()
+          .insert(payload)
 
-        if (existing?.id) {
-          setRowId(existing.id)
-          const { error: updateErr } = await supabase
-            .from('payment_gateways')
-            .update(payload)
-            .eq('id', existing.id)
-
-          if (updateErr) throw updateErr
-        } else {
-          const { data: newRow, error: insertErr } = await supabase
-            .from('payment_gateways')
-            .insert(payload)
-            .select('id')
-            .single()
-
-          if (insertErr) throw insertErr
-          if (newRow?.id) setRowId(newRow.id)
-        }
+        if (insertErr) throw insertErr
       }
 
       showToast('Payment integrations saved successfully', 'success')
@@ -231,20 +231,28 @@ export default function PaymentIntegrationsPage() {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div className="alert alert-info" style={{ backgroundColor: '#eff6ff', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #3b82f6', fontSize: '12.5px', color: '#1e40af', marginBottom: '8px' }}>
+                  <strong>Setup Instructions:</strong> Login to your Hubtel Merchant Portal. Go to <strong>Integrations - API Keys</strong> to generate your Client ID and Client Secret. Your Merchant Account Number is found on your dashboard.
+                </div>
                 <div className="form-group" style={{ marginBottom: '8px' }}>
-                  <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>Client ID / Account Number</label>
-                  <input type="text" name="hubtel_client_id" className="form-control" value={settings.hubtel_client_id} onChange={handleChange} placeholder="Hubtel Client ID..." style={{ width: '100%', height: '44px', padding: '10px 14px', fontSize: '14px', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                  <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>Client ID</label>
+                  <input type="text" name="hubtel_client_id" className="form-control" value={settings.hubtel_client_id} onChange={handleChange} placeholder="e.g. jYxQwZ..." style={{ width: '100%', height: '44px', padding: '10px 14px', fontSize: '14px', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
                 </div>
 
                 <div className="form-group" style={{ marginBottom: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#1e293b', margin: 0 }}>Client Secret / API Key</label>
+                    <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#1e293b', margin: 0 }}>Client Secret</label>
                     <button type="button" onClick={() => toggleSecret('hubtel')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}>
                       {showSecrets.hubtel ? <EyeOff size={15} /> : <Eye size={15} />}
                       <span>{showSecrets.hubtel ? 'Hide Key' : 'Show Key'}</span>
                     </button>
                   </div>
-                  <input type={showSecrets.hubtel ? 'text' : 'password'} name="hubtel_client_secret" className="form-control" value={settings.hubtel_client_secret} onChange={handleChange} placeholder="Hubtel Secret Key..." style={{ width: '100%', height: '44px', padding: '10px 14px', fontSize: '14px', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                  <input type={showSecrets.hubtel ? 'text' : 'password'} name="hubtel_client_secret" className="form-control" value={settings.hubtel_client_secret} onChange={handleChange} placeholder="e.g. 5a1b2c..." style={{ width: '100%', height: '44px', padding: '10px 14px', fontSize: '14px', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: '8px' }}>
+                  <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>Merchant Account Number</label>
+                  <input type="text" name="hubtel_merchant_account_number" className="form-control" value={settings.hubtel_merchant_account_number} onChange={handleChange} placeholder="e.g. 2017320..." style={{ width: '100%', height: '44px', padding: '10px 14px', fontSize: '14px', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
                 </div>
               </div>
             </div>

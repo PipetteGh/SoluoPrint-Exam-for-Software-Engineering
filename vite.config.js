@@ -171,10 +171,125 @@ const uploadPlugin = () => {
   }
 }
 
+const hubtelPlugin = () => {
+  return {
+    name: 'hubtel-proxy-plugin',
+    configureServer(server) {
+      // POST /api/hubtel/initiate - Initiate Hubtel checkout
+      server.middlewares.use('/api/hubtel/initiate', (req, res, next) => {
+        if (req.method === 'POST') {
+          let body = ''
+          req.on('data', chunk => { body += chunk.toString() })
+          req.on('end', async () => {
+            try {
+              const parsed = JSON.parse(body)
+              const { clientId, clientSecret, totalAmount, title, description, clientReference, callbackUrl, returnUrl, cancellationUrl, merchantAccountNumber } = parsed
+
+              if (!clientId || !clientSecret) {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json')
+                return res.end(JSON.stringify({ success: false, error: 'Missing Hubtel credentials' }))
+              }
+
+              const authHeader = 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+
+              const hubtelPayload = {
+                totalAmount: parseFloat(totalAmount),
+                title: title || 'Payment',
+                description: description || 'Payment',
+                callbackUrl: callbackUrl || '',
+                returnUrl: returnUrl || '',
+                cancellationUrl: cancellationUrl || '',
+                merchantAccountNumber: merchantAccountNumber || '',
+                clientReference: clientReference || ''
+              }
+
+              const response = await fetch('https://payproxyapi.hubtel.com/items/initiate', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': authHeader
+                },
+                body: JSON.stringify(hubtelPayload)
+              })
+
+              const rawText = await response.text()
+              let result = {}
+              try {
+                result = rawText ? JSON.parse(rawText) : {}
+              } catch (e) {
+                console.error('Hubtel non-JSON response:', rawText)
+                result = { error: 'Invalid response from Hubtel', details: rawText }
+              }
+
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ success: response.ok, status: response.status, data: result }))
+            } catch (err) {
+              console.error('Hubtel Proxy Error:', err)
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ success: false, error: err.message }))
+            }
+          })
+        } else {
+          next()
+        }
+      })
+
+      // GET /api/hubtel/status?clientId=...&clientSecret=...&clientReference=... - Check payment status
+      server.middlewares.use('/api/hubtel/status', (req, res, next) => {
+        if (req.method === 'GET') {
+          ;(async () => {
+            try {
+              const url = new URL(req.url, `http://${req.headers.host}`)
+              const clientId = url.searchParams.get('clientId')
+              const clientSecret = url.searchParams.get('clientSecret')
+              const clientReference = url.searchParams.get('clientReference')
+
+              if (!clientId || !clientSecret || !clientReference) {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json')
+                return res.end(JSON.stringify({ success: false, error: 'Missing required parameters' }))
+              }
+
+              const authHeader = 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+              const statusUrl = `https://payproxyapi.hubtel.com/items/${encodeURIComponent(clientReference)}/status`
+
+              const response = await fetch(statusUrl, {
+                method: 'GET',
+                headers: { 'Authorization': authHeader }
+              })
+
+              const rawText = await response.text()
+              let result = {}
+              try {
+                result = rawText ? JSON.parse(rawText) : {}
+              } catch (e) {
+                console.error('Hubtel status non-JSON response:', rawText)
+                result = { error: 'Invalid response from Hubtel', details: rawText }
+              }
+
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ success: response.ok, status: response.status, data: result }))
+            } catch (err) {
+              console.error('Hubtel Status Check Error:', err)
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ success: false, error: err.message }))
+            }
+          })()
+        } else {
+          next()
+        }
+      })
+    }
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [react(), emailPlugin(env), uploadPlugin()],
+    plugins: [react(), emailPlugin(env), uploadPlugin(), hubtelPlugin()],
     base: '/',
     server: {
       port: 3000,

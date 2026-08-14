@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { sendEmail } from '../lib/email'
 
 export default function RegisterPage() {
   const [step, setStep] = useState(0) // 0: Details, 1: OTP, 2: Success
@@ -47,10 +48,12 @@ export default function RegisterPage() {
       setResendTimer(60)
 
       // Fire email in the background (don't await) so the UI doesn't freeze
-      import('../lib/email').then(({ sendEmail }) => {
-        sendEmail(form.email, 'Your SoluoPrint Verification Code', `<p>Your verification code is: <strong style="font-size:24px;">${code}</strong></p><p>Please enter this code to complete your registration. This code expires in 20 minutes.</p>`, 'SoluoPrint')
-          .catch(err => console.error('OTP email send error:', err))
-      })
+      sendEmail(
+        form.email, 
+        'Your SoluoPrint Verification Code', 
+        `<p>Your verification code is: <strong style="font-size:24px;">${code}</strong></p><p>Please enter this code to complete your registration. This code expires in 20 minutes.</p>`, 
+        'SoluoPrint'
+      ).catch(err => console.error('OTP email send error:', err))
       
       if (!isResend) setStep(1)
     } catch (err) {

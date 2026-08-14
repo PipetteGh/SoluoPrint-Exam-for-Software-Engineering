@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { sendEmail } from '../lib/email'
+import { sendSms } from '../lib/sms'
 
 const AuthContext = createContext({})
 
@@ -192,13 +194,10 @@ export function AuthProvider({ children }) {
           </div>
         `
         // Send welcome notifications in the background (non-blocking for speed)
-        import('../lib/email').then(({ sendEmail }) => {
-          sendEmail(email, 'Welcome to SoluoPrint!', welcomeHtml, 'SoluoPrint').catch(console.error)
-        })
+        sendEmail(email, 'Welcome to SoluoPrint!', welcomeHtml, 'SoluoPrint').catch(console.error)
+        
         if (phone) {
-          import('../lib/sms').then(({ sendSms }) => {
-            sendSms(phone, `Hello ${fullName}, Welcome to SoluoPrint! Your profile for ${companyName} has been created.`).catch(console.error)
-          })
+          sendSms(phone, `Hello ${fullName}, Welcome to SoluoPrint! Your profile for ${companyName} has been created.`).catch(console.error)
         }
       }
     }

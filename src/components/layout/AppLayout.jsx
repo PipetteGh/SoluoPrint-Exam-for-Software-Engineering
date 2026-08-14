@@ -40,6 +40,7 @@ export default function AppLayout() {
   const quickActionsRef = useRef(null)
   const userMenuRef = useRef(null)
   const notificationsRef = useRef(null)
+  const prevJobListCountRef = useRef(null)
 
   // Real-time notifications listener for current company
   useEffect(() => {
@@ -155,7 +156,12 @@ export default function AppLayout() {
         .neq('status', 'Converted')
         .neq('status', 'Cancelled')
 
-      setPendingJobListCount(jlCount || 0)
+      const currentCount = jlCount || 0
+      if (prevJobListCountRef.current !== null && currentCount > prevJobListCountRef.current) {
+        toast.info("A new staged job has been uploaded to the Job List!")
+      }
+      prevJobListCountRef.current = currentCount
+      setPendingJobListCount(currentCount)
 
       // 2. Today's active Print Jobs count
       const todayStr = new Date().toISOString().split('T')[0]

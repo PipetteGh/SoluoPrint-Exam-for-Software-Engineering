@@ -6,7 +6,11 @@ import Preloader from '../ui/Preloader'
 
 export default function CustomerPaymentModal({ onClose, onSuccess, customer, balance, job }) {
   const [amount, setAmount] = useState(job ? job.balance : (balance || 0))
-  const [gateways, setGateways] = useState({ paystack: false, paystackKey: '', hubtel: false, flutterwave: false })
+  const [gateways, setGateways] = useState({ 
+    paystack: false, paystackKey: '', 
+    hubtel: false, hubtelClientId: '', hubtelClientSecret: '', hubtelMerchantId: '',
+    flutterwave: false 
+  })
   const [selectedMethod, setSelectedMethod] = useState('')
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
@@ -32,6 +36,9 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
           paystack: data.paystack_active,
           paystackKey: data.paystack_public_key,
           hubtel: data.hubtel_active,
+          hubtelClientId: data.hubtel_client_id,
+          hubtelClientSecret: data.hubtel_client_secret,
+          hubtelMerchantId: data.hubtel_merchant_account_number,
           flutterwave: data.flutterwave_active
         })
         
@@ -169,6 +176,98 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
         })
         handler.openIframe()
       }
+    } else if (selectedMethod === 'Hubtel') {
+      if (!gateways.hubtelClientId || !gateways.hubtelClientSecret || !gateways.hubtelMerchantId) {
+        showToast('Hubtel is not fully configured by the shop.', 'error')
+        setProcessing(false)
+        return
+      }
+
+      try {
+        const reference = 'SP_' + Date.now() + '_' + Math.floor(Math.random() * 100000)
+        const returnUrl = `${window.location.origin}/customer?hubtel_ref=${encodeURIComponent(reference)}&hubtel_status=success`
+        const cancelUrl = `${window.location.origin}/customer?hubtel_ref=${encodeURIComponent(reference)}&hubtel_status=cancelled`
+
+        // Store the pending payment reference in Supabase so we can process it when the customer returns
+        const { error: upsertErr } = await supabase.from('pending_payments').upsert({
+          client_reference: reference,
+          company_id: customer.company_id,
+          customer_id: customer.id,
+          job_id: job ? job.id : null,
+          amount: parseFloat(amount),
+          gateway: 'Hubtel',
+          status: 'pending',
+          created_at: new Date().toISOString()
+        }, { onConflict: 'client_reference' })
+        
+        if (upsertErr) {
+          // Table may not exist yet — store in localStorage as fallback
+          localStorage.setItem(`hubtel_pending_${reference}`, JSON.stringify({
+            companyId: customer.company_id,
+            customerId: customer.id,
+            jobId: job ? job.id : null,
+            amount: parseFloat(amount),
+            gateway: 'Hubtel'
+          }))
+        }
+
+        // Also always store in localStorage as immediate fallback
+        localStorage.setItem(`hubtel_pending_${reference}`, JSON.stringify({
+          companyId: customer.company_id,
+          customerId: customer.id,
+          jobId: job ? job.id : null,
+          amount: parseFloat(amount),
+          gateway: 'Hubtel'
+        }))
+
+        // Call server-side proxy to initiate Hubtel checkout (avoids CORS)
+        const baseUrl = window.location.origin
+        const response = await fetch(`${baseUrl}/api/hubtel/initiate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientId: gateways.hubtelClientId,
+            clientSecret: gateways.hubtelClientSecret,
+            totalAmount: parseFloat(amount),
+            title: `Payment to ${customer?.companies?.name || 'Shop'}`,
+            description: job ? `Payment for Job #${job.job_number}` : 'Outstanding Balance Payment',
+            clientReference: reference,
+            callbackUrl: `${baseUrl}/api/hubtel/callback`,
+            returnUrl: returnUrl,
+            cancellationUrl: cancelUrl,
+            merchantAccountNumber: gateways.hubtelMerchantId
+          })
+        })
+
+        const result = await response.json()
+
+        if (result.success && result.data?.data?.checkoutUrl) {
+          showToast('Redirecting to Hubtel secure checkout...', 'info')
+          setTimeout(() => {
+            window.location.href = result.data.data.checkoutUrl
+          }, 1000)
+        } else if (result.data?.data?.checkoutUrl) {
+          // Some Hubtel responses nest differently
+          showToast('Redirecting to Hubtel secure checkout...', 'info')
+          setTimeout(() => {
+            window.location.href = result.data.data.checkoutUrl
+          }, 1000)
+        } else {
+          // Extract specific Hubtel error details if available
+          let details = ''
+          if (result.data?.errors) {
+            details = ': ' + JSON.stringify(result.data.errors)
+          } else if (result.data?.message) {
+            details = ': ' + result.data.message
+          }
+          const errMsg = 'Hubtel Error' + details || result.error || 'Failed to initiate Hubtel checkout. Please check your Hubtel credentials.'
+          throw new Error(errMsg)
+        }
+      } catch (err) {
+        console.error('Hubtel checkout error:', err)
+        showToast(err.message || 'Error processing Hubtel payment.', 'error')
+        setProcessing(false)
+      }
     } else {
       // Handle other methods (simulate for now if not implemented)
       await new Promise(r => setTimeout(r, 2000))
@@ -231,51 +330,15 @@ export default function CustomerPaymentModal({ onClose, onSuccess, customer, bal
               </div>
 
               <div className="form-group" style={{ marginTop: '20px' }}>
-                <label className="form-label" style={{ color: '#1e293b', fontWeight: 600, fontSize: '14px', marginBottom: '10px' }}>Select Payment Method</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label className="form-label" style={{ color: '#1e293b', fontWeight: 600, fontSize: '14px', marginBottom: '10px' }}>Payment Method</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', border: '1px solid #cbd5e1', borderRadius: '10px', backgroundColor: '#f8fafc' }}>
+                  {selectedMethod === 'Paystack' && <CreditCard size={20} style={{ color: '#0ea5e9' }} />}
+                  {selectedMethod === 'Hubtel' && <Smartphone size={20} style={{ color: '#f59e0b' }} />}
+                  {selectedMethod === 'Flutterwave' && <CreditCard size={20} style={{ color: '#f43f5e' }} />}
                   
-                  {gateways.paystack && (
-                    <label style={{
-                      display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
-                      border: `2px solid ${selectedMethod === 'Paystack' ? '#2563eb' : '#cbd5e1'}`,
-                      borderRadius: '10px', cursor: 'pointer',
-                      backgroundColor: selectedMethod === 'Paystack' ? '#eff6ff' : 'white',
-                      transition: 'all 0.15s ease'
-                    }}>
-                      <input type="radio" name="method" checked={selectedMethod === 'Paystack'} onChange={() => setSelectedMethod('Paystack')} style={{ accentColor: '#2563eb', width: '18px', height: '18px' }} />
-                      <CreditCard size={20} style={{ color: '#0ea5e9' }} />
-                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '14px' }}>Pay with Paystack (Card / MoMo)</span>
-                    </label>
-                  )}
-
-                  {gateways.hubtel && (
-                    <label style={{
-                      display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
-                      border: `2px solid ${selectedMethod === 'Hubtel' ? '#2563eb' : '#cbd5e1'}`,
-                      borderRadius: '10px', cursor: 'pointer',
-                      backgroundColor: selectedMethod === 'Hubtel' ? '#eff6ff' : 'white',
-                      transition: 'all 0.15s ease'
-                    }}>
-                      <input type="radio" name="method" checked={selectedMethod === 'Hubtel'} onChange={() => setSelectedMethod('Hubtel')} style={{ accentColor: '#2563eb', width: '18px', height: '18px' }} />
-                      <Smartphone size={20} style={{ color: '#f59e0b' }} />
-                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '14px' }}>Pay with Hubtel Mobile Money</span>
-                    </label>
-                  )}
-
-                  {gateways.flutterwave && (
-                    <label style={{
-                      display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
-                      border: `2px solid ${selectedMethod === 'Flutterwave' ? '#2563eb' : '#cbd5e1'}`,
-                      borderRadius: '10px', cursor: 'pointer',
-                      backgroundColor: selectedMethod === 'Flutterwave' ? '#eff6ff' : 'white',
-                      transition: 'all 0.15s ease'
-                    }}>
-                      <input type="radio" name="method" checked={selectedMethod === 'Flutterwave'} onChange={() => setSelectedMethod('Flutterwave')} style={{ accentColor: '#2563eb', width: '18px', height: '18px' }} />
-                      <CreditCard size={20} style={{ color: '#f43f5e' }} />
-                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '14px' }}>Pay with Flutterwave</span>
-                    </label>
-                  )}
-
+                  <span style={{ fontWeight: 600, color: '#334155', fontSize: '14px' }}>
+                    {selectedMethod ? `Secure checkout via ${selectedMethod}` : 'No payment method active'}
+                  </span>
                 </div>
               </div>
             </>
