@@ -12,6 +12,16 @@ import NewJobListModal from '../components/modals/NewJobListModal'
 
 const STATUS_OPTIONS = ['Pending', 'In Progress', 'Ready', 'Converted', 'Cancelled']
 
+const hasFiles = (files) => {
+  if (!files) return false
+  if (Array.isArray(files)) return files.length > 0
+  if (typeof files === 'string') {
+    const clean = files.trim()
+    return clean !== '' && clean !== '[]' && clean !== 'null'
+  }
+  return false
+}
+
 export default function JobListPage() {
   const { company } = useAuth()
   const [items, setItems] = useState([])
@@ -421,7 +431,7 @@ export default function JobListPage() {
                     <div style={{ fontSize: '14px', lineHeight: 1.6, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '12px' }}>{showDetail.notes}</div>
                   </div>
                 )}
-                {(showDetail.images || []).length > 0 && (
+                {hasFiles(showDetail.images) && (
                   <div style={{ marginTop: '4px' }}>
                     <FileGallery files={showDetail.images} title="Uploaded Artwork & Documents" />
                   </div>

@@ -169,6 +169,7 @@ export async function downloadFile(rawUrl, fallbackName = 'download', onStart = 
 export default function FileGallery({ files = [], title = "Attached Files" }) {
   const [downloadingIndex, setDownloadingIndex] = useState(null)
   const [downloadedIndex, setDownloadedIndex] = useState(null)
+  const [hoveredIndex, setHoveredIndex] = useState(null)
   
   let showToast = () => {}
   try {
@@ -225,94 +226,119 @@ export default function FileGallery({ files = [], title = "Attached Files" }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '10px' }}>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         {fileList.map((rawUrl, i) => {
           const isPdf = isPdfFile(rawUrl)
           const isImg = isImageFile(rawUrl)
           const fileName = extractFileName(rawUrl, i)
           const isDownloading = downloadingIndex === i
           const isDownloaded = downloadedIndex === i
+          const isHovered = hoveredIndex === i
+          const imgSrc = window.location.hostname === 'localhost' && !rawUrl.startsWith('http') ? `http://localhost${rawUrl}` : rawUrl
 
           return (
-            <div
-              key={i}
-              style={{
-                border: isDownloading ? '1px solid #3b82f6' : isDownloaded ? '1px solid #10b981' : '1px solid var(--border)',
-                backgroundColor: isDownloading ? '#eff6ff' : isDownloaded ? '#f0fdf4' : '#ffffff',
-                borderRadius: '10px',
-                padding: '12px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '12px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden', flex: 1 }}>
-                {isPdf ? (
-                  <FileText size={22} color="#dc2626" style={{ flexShrink: 0 }} />
-                ) : isImg ? (
-                  <ImageIcon size={22} color="#2563eb" style={{ flexShrink: 0 }} />
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', width: '80px' }}>
+              <div
+                onMouseEnter={() => setHoveredIndex(i)}
+                onMouseLeave={() => setHoveredIndex(null)}
+                onClick={() => !isDownloading && handleDownload(rawUrl, fileName, i)}
+                style={{
+                  position: 'relative',
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  border: isDownloading ? '2px solid #3b82f6' : isDownloaded ? '2px solid #10b981' : '1px solid var(--border)',
+                  background: '#f8fafc',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: isDownloading ? 'wait' : 'pointer',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                  transition: 'all 0.15s ease-in-out'
+                }}
+                title={isDownloading ? `Downloading ${fileName}...` : `Click to Download ${fileName}`}
+              >
+                {/* Thumbnail / Doc Preview */}
+                {isImg ? (
+                  <img src={imgSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                  <File size={22} color="#64748b" style={{ flexShrink: 0 }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '4px' }}>
+                    <FileText size={24} color={isDownloading ? '#3b82f6' : isDownloaded ? '#10b981' : '#64748b'} />
+                  </div>
                 )}
-                <div style={{ overflow: 'hidden', flex: 1 }}>
-                  <div 
-                    style={{ 
-                      fontSize: '13px', 
-                      fontWeight: 600, 
-                      color: '#1e293b', 
-                      whiteSpace: 'nowrap', 
-                      overflow: 'hidden', 
-                      textOverflow: 'ellipsis' 
-                    }} 
-                    title={fileName}
-                  >
-                    {fileName}
+
+                {/* Hover Download Overlay */}
+                {isHovered && !isDownloading && !isDownloaded && (
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(15,23,42,0.65)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    transition: 'all 0.15s ease'
+                  }}>
+                    <Download size={20} />
                   </div>
-                  <div style={{ fontSize: '11px', color: isDownloading ? '#2563eb' : isDownloaded ? '#059669' : 'var(--text-muted)', marginTop: '2px', fontWeight: isDownloading ? 600 : 400 }}>
-                    {isDownloading ? 'Downloading file...' : isDownloaded ? 'Downloaded!' : isPdf ? 'PDF Document' : isImg ? 'Image File' : 'Attachment'}
+                )}
+
+                {/* Downloading Overlay */}
+                {isDownloading && (
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(239,246,255,0.95)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#2563eb',
+                    gap: '4px',
+                    padding: '2px'
+                  }}>
+                    <Loader2 size={16} className="spin" style={{ animation: 'spin 1s linear infinite' }} />
+                    <span style={{ fontSize: '7.5px', fontWeight: 800, textTransform: 'uppercase', textAlign: 'center', letterSpacing: '-0.3px' }}>DOWNLOADING</span>
                   </div>
-                </div>
+                )}
+
+                {/* Downloaded Success Overlay */}
+                {isDownloaded && (
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(240,253,244,0.95)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#166534',
+                    gap: '4px',
+                    padding: '2px'
+                  }}>
+                    <CheckCircle2 size={16} />
+                    <span style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase' }}>DONE</span>
+                  </div>
+                )}
               </div>
 
-              <button
-                type="button"
-                className={`btn ${isDownloaded ? 'btn-success' : 'btn-primary'} btn-sm`}
+              {/* Visible Filename Below Card */}
+              <span 
                 style={{ 
-                  padding: '6px 12px', 
-                  fontSize: '12px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '6px',
+                  fontSize: '10px', 
+                  color: 'var(--text-secondary)', 
+                  textAlign: 'center', 
+                  maxWidth: '80px', 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis', 
                   whiteSpace: 'nowrap',
-                  cursor: isDownloading ? 'wait' : 'pointer',
-                  backgroundColor: isDownloading ? '#93c5fd' : isDownloaded ? '#10b981' : undefined,
-                  borderColor: isDownloading ? '#93c5fd' : isDownloaded ? '#10b981' : undefined,
-                  color: 'white'
+                  fontWeight: 500
                 }}
-                disabled={isDownloading}
-                onClick={() => handleDownload(rawUrl, fileName, i)}
-                title={isDownloading ? `Downloading ${fileName}...` : `Download ${fileName}`}
+                title={fileName}
               >
-                {isDownloading ? (
-                  <>
-                    <Loader2 size={14} className="spin" style={{ animation: 'spin 1s linear infinite' }} />
-                    <span>Downloading...</span>
-                  </>
-                ) : isDownloaded ? (
-                  <>
-                    <CheckCircle2 size={14} />
-                    <span>Downloaded</span>
-                  </>
-                ) : (
-                  <>
-                    <Download size={14} />
-                    <span>Download</span>
-                  </>
-                )}
-              </button>
+                {fileName}
+              </span>
             </div>
           )
         })}

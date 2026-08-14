@@ -1163,6 +1163,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .pill-orange { background: var(--warning-bg); color: #92400e; }
 .pill-red { background: var(--error-bg); color: #991b1b; }
 .pill-gray { background: #f1f5f9; color: var(--text-secondary); }
+.pill-purple { background: #f3e8ff; color: #6b21a8; }
+.pill-indigo { background: #e0e7ff; color: #3730a3; }
+.pill-teal { background: #ccfbf1; color: #115e59; }
+.pill-cyan { background: #ecfeff; color: #155e75; }
 
 /* Quick actions dropdown */
 .quick-actions-dropdown {

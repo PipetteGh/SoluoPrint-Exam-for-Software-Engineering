@@ -85,7 +85,8 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
             <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; padding: 40px 20px; max-width: 600px; margin: 0 auto; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
               <!-- Header -->
               <div style="text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px;">
-                <div style="display: inline-block; background: linear-gradient(135deg, #2563eb, #10b981); color: white; padding: 12px 24px; border-radius: 8px; font-weight: 800; font-size: 24px; letter-spacing: -0.5px;">
+                <img src="${company?.logo_url || (window.location.origin + '/logo.png')}" alt="Logo" style="max-height: 50px; width: auto; margin-bottom: 10px;" onerror="this.style.display='none'" />
+                <div style="font-size: 24px; font-weight: 800; color: #1e293b; letter-spacing: -0.5px; line-height: 1.2;">
                   ${company?.name || 'SoluoPrint'}
                 </div>
               </div>

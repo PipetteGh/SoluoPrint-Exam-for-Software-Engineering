@@ -14,11 +14,13 @@ import NewPaymentModal from '../modals/NewPaymentModal'
 import NewCustomerModal from '../modals/NewCustomerModal'
 import AdminSupportChatModal from '../chat/AdminSupportChatModal'
 import OnboardingTour from '../ui/OnboardingTour'
+import { useToast } from '../../contexts/ToastContext'
 
 export default function AppLayout() {
   const { user, profile, company, signOut, hasPermission } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const toast = useToast()
   const [reportsOpen, setReportsOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [financeOpen, setFinanceOpen] = useState(false)
@@ -51,20 +53,66 @@ export default function AppLayout() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `company_id=eq.${company.id}` },
         (payload) => {
-          setNotifications(prev => [payload.new, ...prev])
-          setUnreadCount(count => count + 1)
-          loadCounts()
+          if (payload.new) {
+            setNotifications(prev => [payload.new, ...prev])
+            setUnreadCount(count => count + 1)
+            loadCounts()
+            // Alert admin with real-time visual toast
+            toast.info(`${payload.new.title || 'Notification'}: ${payload.new.message || ''}`)
+          }
         }
       )
       .subscribe()
 
-    const channelJobList = supabase
-      .channel(`public:job_list:${company.id}`)
+    const channelJobListInsert = supabase
+      .channel(`public:job_list_insert:${company.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'job_list', filter: `company_id=eq.${company.id}` },
-        () => {
+        { event: 'INSERT', schema: 'public', table: 'job_list', filter: `company_id=eq.${company.id}` },
+        async (payload) => {
           loadCounts()
+          if (payload.new) {
+            const { data: cust } = await supabase
+              .from('customers')
+              .select('name')
+              .eq('id', payload.new.customer_id)
+              .maybeSingle()
+            
+            toast.info(`New Job Uploaded: ${cust?.name || 'A customer'} uploaded a new staged job "${payload.new.description || 'Custom Print Upload'}"`)
+          }
+        }
+      )
+      .subscribe()
+
+    const channelJobListUpdateDelete = supabase
+      .channel(`public:job_list_upd_del:${company.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'job_list', filter: `company_id=eq.${company.id}` },
+        () => loadCounts()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'job_list', filter: `company_id=eq.${company.id}` },
+        () => loadCounts()
+      )
+      .subscribe()
+
+    const channelPaymentsInsert = supabase
+      .channel(`public:payments_insert:${company.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'payments', filter: `company_id=eq.${company.id}` },
+        async (payload) => {
+          if (payload.new) {
+            const { data: cust } = await supabase
+              .from('customers')
+              .select('name')
+              .eq('id', payload.new.customer_id)
+              .maybeSingle()
+            
+            toast.success(`Payment Received: ${cust?.name || 'A customer'} paid ${company?.currency_symbol || '¢'} ${Number(payload.new.amount).toFixed(2)} via ${payload.new.payment_method || 'Online'}`)
+          }
         }
       )
       .subscribe()
@@ -88,7 +136,9 @@ export default function AppLayout() {
 
     return () => {
       supabase.removeChannel(channelNotif)
-      supabase.removeChannel(channelJobList)
+      supabase.removeChannel(channelJobListInsert)
+      supabase.removeChannel(channelJobListUpdateDelete)
+      supabase.removeChannel(channelPaymentsInsert)
       supabase.removeChannel(channelPrintJobs)
       clearInterval(heartbeat)
     }

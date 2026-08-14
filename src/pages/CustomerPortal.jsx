@@ -21,6 +21,16 @@ import {
 } from 'chart.js'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 
+const hasFiles = (files) => {
+  if (!files) return false
+  if (Array.isArray(files)) return files.length > 0
+  if (typeof files === 'string') {
+    const clean = files.trim()
+    return clean !== '' && clean !== '[]' && clean !== 'null'
+  }
+  return false
+}
+
 const whiteBackgroundPlugin = {
   id: 'customCanvasBackgroundColor',
   beforeDraw: (chart) => {
@@ -54,6 +64,55 @@ function formatMoney(val) {
     return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function renderStatusBadge(status = 'Pending') {
+  const norm = status.toLowerCase()
+  let bg = '#f1f5f9'
+  let border = '#e2e8f0'
+  let text = '#475569'
+
+  if (norm.includes('pending')) {
+    bg = '#eff6ff'
+    border = '#bfdbfe'
+    text = '#2563eb'
+  } else if (norm.includes('progress') || norm.includes('printing')) {
+    bg = '#fef3c7'
+    border = '#fde68a'
+    text = '#d97706'
+  } else if (norm.includes('completed') || norm.includes('done') || norm.includes('ready')) {
+    bg = '#dcfce7'
+    border = '#bbf7d0'
+    text = '#15803d'
+  } else if (norm.includes('cancelled') || norm.includes('cancel')) {
+    bg = '#fef2f2'
+    border = '#fca5a5'
+    text = '#dc2626'
+  }
+
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '5px',
+      padding: '4px 10px',
+      borderRadius: '20px',
+      fontSize: '12px',
+      fontWeight: 600,
+      background: bg,
+      border: `1px solid ${border}`,
+      color: text
+    }}>
+      <span style={{
+        display: 'inline-block',
+        width: '6px',
+        height: '6px',
+        borderRadius: '50%',
+        background: text
+      }} />
+      {status}
+    </span>
+  )
 }
 
 export default function CustomerPortal() {
@@ -662,6 +721,7 @@ export default function CustomerPortal() {
                 <table>
                   <thead>
                     <tr>
+                      <th style={{ width: '50px' }}>No.</th>
                       <th>Job Number</th>
                       <th>Category</th>
                       <th>Details</th>
@@ -673,8 +733,11 @@ export default function CustomerPortal() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedJobs.map(job => (
+                    {paginatedJobs.map((job, idx) => (
                       <tr key={job.id}>
+                        <td style={{ fontWeight: 600, color: 'var(--text-muted)' }}>
+                          #{((currentPage - 1) * jobsPerPage) + idx + 1}
+                        </td>
                         <td style={{ fontWeight: 500 }}>
                           <button 
                             onClick={() => setSelectedJobForReceipt(job)}
@@ -715,11 +778,22 @@ export default function CustomerPortal() {
                             {job.quantity}x {job.width && job.height ? `${job.width}x${job.height} ${job.unit}` : ''}
                           </div>
                         </td>
-                        <td>{formatDateTime(job.job_date || job.created_at)}</td>
                         <td>
-                          <span className={`status-badge status-${job.status?.toLowerCase().replace(' ', '-') || 'pending'}`}>
-                            {job.status || 'Pending'}
+                          <span style={{ 
+                            fontSize: '12.5px', 
+                            color: '#334155', 
+                            fontWeight: 500,
+                            background: '#f8fafc',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid #e2e8f0',
+                            display: 'inline-block'
+                          }}>
+                            {formatDateTime(job.job_date || job.created_at)}
                           </span>
+                        </td>
+                        <td>
+                          {renderStatusBadge(job.status || 'Pending')}
                         </td>
                         <td style={{ textAlign: 'right' }}>{currency} {Number(job.total_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td style={{ textAlign: 'right' }}>{currency} {Number(job.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -874,14 +948,26 @@ export default function CustomerPortal() {
                           {item.description || 'Custom Print Upload'}
                         </span>
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                        Uploaded on {new Date(item.created_at).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(item.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}
+                      <div style={{ marginTop: '8px' }}>
+                        <span style={{ 
+                          fontSize: '12px', 
+                          color: '#475569', 
+                          background: '#f8fafc', 
+                          padding: '4px 10px', 
+                          borderRadius: '8px', 
+                          border: '1px solid #e2e8f0',
+                          fontWeight: 500,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          <span style={{ color: '#64748b', fontWeight: 600 }}>Uploaded:</span>
+                          <span>{new Date(item.created_at).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(item.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}</span>
+                        </span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className={`status-badge status-${item.status?.toLowerCase() === 'converted' ? 'completed' : 'pending'}`}>
-                        {item.status === 'Converted' ? 'Converted to Print Job' : 'Pending Shop Review'}
-                      </span>
+                      {renderStatusBadge(item.status === 'Converted' ? 'Converted to Print Job' : 'Pending Shop Review')}
                       {item.status !== 'Converted' && (
                         <div style={{ display: 'flex', gap: '6px', marginLeft: '6px' }}>
                           <button 
@@ -911,7 +997,7 @@ export default function CustomerPortal() {
                     </div>
                   )}
 
-                  {(item.images || []).length > 0 && (
+                  {hasFiles(item.images) && (
                     <FileGallery files={item.images} title="Attached Artwork & Documents" />
                   )}
                 </div>

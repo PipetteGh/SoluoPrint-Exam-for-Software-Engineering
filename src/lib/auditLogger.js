@@ -130,7 +130,7 @@ export async function logAudit({ companyId, userId, actorName, actorRole, action
 
     const logItem = {
       company_id: companyId || null,
-      user_id: userId || null,
+      user_id: (actorRole === 'Customer' || actorRole === 'customer') ? null : (userId || null),
       actor_name: actorName || 'System User',
       actor_role: actorRole || 'User',
       action: action || 'GENERAL_EVENT',

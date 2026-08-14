@@ -165,15 +165,40 @@ export function AuthProvider({ children }) {
 
         await seedDefaultData(comp.id)
 
-        try {
-          const { sendEmail } = await import('../lib/email')
-          await sendEmail(email, 'Welcome to SoluoPrint!', `<p>Hello ${fullName},</p><p>Welcome to SoluoPrint! Your company profile for <b>${companyName}</b> has been successfully created.</p>`, 'SoluoPrint')
-          if (phone) {
-            const { sendSms } = await import('../lib/sms')
-            await sendSms(phone, `Hello ${fullName}, Welcome to SoluoPrint! Your profile for ${companyName} has been created.`)
-          }
-        } catch (e) {
-          console.error("Failed to send welcome notifications", e)
+        const loginUrl = window.location.origin
+        const welcomeHtml = `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8fafc;">
+            <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <img src="${window.location.origin}/logo.png" alt="SoluoPrint Logo" style="max-height: 50px; width: auto; margin-bottom: 10px;" onerror="this.style.display='none'" />
+                <div style="font-size: 24px; font-weight: 800; color: #2563eb; letter-spacing: -0.5px; line-height: 1.2;">SoluoPrint</div>
+                <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Modern Print Shop Management</div>
+              </div>
+              <div style="height: 1px; background-color: #e2e8f0; margin-bottom: 24px;"></div>
+              <p style="font-size: 16px; color: #334155; line-height: 1.6; margin-bottom: 20px;">Hello <b>${fullName}</b>,</p>
+              <p style="font-size: 16px; color: #334155; line-height: 1.6; margin-bottom: 24px;">
+                Welcome to <b>SoluoPrint</b>! Your print shop registration is complete, and your company profile for <b>${companyName}</b> has been successfully provisioned.
+              </p>
+              <div style="text-align: center; margin-bottom: 30px;">
+                <a href="${loginUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 30px; border-radius: 6px; font-weight: 700; text-decoration: none; font-size: 16px; display: inline-block;">
+                  Go to Admin Dashboard
+                </a>
+              </div>
+              <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 13px; color: #64748b; line-height: 1.5; text-align: center;">
+                Regards,<br><b>SoluoPrint Onboarding Team</b><br>
+                <div style="margin-top: 12px; font-size: 11px; color: #94a3b8;">Powered by: Soluotech</div>
+              </div>
+            </div>
+          </div>
+        `
+        // Send welcome notifications in the background (non-blocking for speed)
+        import('../lib/email').then(({ sendEmail }) => {
+          sendEmail(email, 'Welcome to SoluoPrint!', welcomeHtml, 'SoluoPrint').catch(console.error)
+        })
+        if (phone) {
+          import('../lib/sms').then(({ sendSms }) => {
+            sendSms(phone, `Hello ${fullName}, Welcome to SoluoPrint! Your profile for ${companyName} has been created.`).catch(console.error)
+          })
         }
       }
     }
@@ -276,16 +301,40 @@ export function AuthProvider({ children }) {
     // 6. Seed defaults
     await seedDefaultData(comp.id)
 
-    // Send final Welcome Emails (No verification links!)
-    try {
-      const { sendEmail } = await import('../lib/email')
-      await sendEmail(email, 'Welcome to SoluoPrint!', `<p>Hello ${fullName},</p><p>Welcome to SoluoPrint! Your company profile for <b>${companyName}</b> has been successfully created.</p><p>You can now log in using your email and password.</p>`, 'SoluoPrint')
-      if (phone) {
-        const { sendSms } = await import('../lib/sms')
-        await sendSms(phone, `Hello ${fullName}, Welcome to SoluoPrint! Your profile for ${companyName} has been created. You can now log in.`)
-      }
-    } catch (e) {
-      console.error("Failed to send welcome notifications", e)
+    const loginUrl = window.location.origin
+    const welcomeHtml = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8fafc;">
+        <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <img src="${window.location.origin}/logo.png" alt="SoluoPrint Logo" style="max-height: 50px; width: auto; margin-bottom: 10px;" onerror="this.style.display='none'" />
+            <div style="font-size: 24px; font-weight: 800; color: #2563eb; letter-spacing: -0.5px; line-height: 1.2;">SoluoPrint</div>
+            <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Modern Print Shop Management</div>
+          </div>
+          <div style="height: 1px; background-color: #e2e8f0; margin-bottom: 24px;"></div>
+          <p style="font-size: 16px; color: #334155; line-height: 1.6; margin-bottom: 20px;">Hello <b>${fullName}</b>,</p>
+          <p style="font-size: 16px; color: #334155; line-height: 1.6; margin-bottom: 24px;">
+            Welcome to <b>SoluoPrint</b>! Your print shop registration is complete, and your company profile for <b>${companyName}</b> has been successfully provisioned.
+          </p>
+          <div style="text-align: center; margin-bottom: 30px;">
+            <a href="${loginUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 30px; border-radius: 6px; font-weight: 700; text-decoration: none; font-size: 16px; display: inline-block;">
+              Go to Admin Dashboard
+            </a>
+          </div>
+          <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 13px; color: #64748b; line-height: 1.5; text-align: center;">
+            Regards,<br><b>SoluoPrint Onboarding Team</b><br>
+            <div style="margin-top: 12px; font-size: 11px; color: #94a3b8;">Powered by: Soluotech</div>
+          </div>
+        </div>
+      </div>
+    `
+    // Send welcome notifications in the background (non-blocking for speed)
+    import('../lib/email').then(({ sendEmail }) => {
+      sendEmail(email, 'Welcome to SoluoPrint!', welcomeHtml, 'SoluoPrint').catch(console.error)
+    })
+    if (phone) {
+      import('../lib/sms').then(({ sendSms }) => {
+        sendSms(phone, `Hello ${fullName}, Welcome to SoluoPrint! Your profile for ${companyName} has been created. You can now log in.`).catch(console.error)
+      })
     }
 
     // 7. Establish the session

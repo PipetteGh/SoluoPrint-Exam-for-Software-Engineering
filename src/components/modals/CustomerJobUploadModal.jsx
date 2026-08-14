@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
-import { X, Upload, File as FileIcon, XCircle, Loader2 } from 'lucide-react'
+import { X, Upload, File as FileIcon, XCircle, Loader2, Plus, FileText, CheckSquare, Square } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
 import { sendSms } from '../../lib/sms'
 import { sendEmail } from '../../lib/email'
@@ -9,58 +9,104 @@ import { recalculateCustomerBalance } from '../../lib/balanceUtils'
 
 export default function CustomerJobUploadModal({ onClose, onSuccess, customer, jobToEdit = null }) {
   const [form, setForm] = useState({ 
-    category: jobToEdit?.services?.[0]?.name || 'General', 
-    notes: jobToEdit?.notes || '', 
-    width: '', 
-    height: '', 
-    unit: 'ft', 
-    quantity: 1 
+    selectedServices: jobToEdit?.services || [],
+    description: jobToEdit?.description || '',
+    notes: jobToEdit?.notes || '',
+    width: '',
+    height: '',
+    unit: 'ft'
   })
   const [files, setFiles] = useState([])
   const [existingImages, setExistingImages] = useState(jobToEdit?.images || [])
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadStep, setUploadStep] = useState('')
+  const [services, setServices] = useState([])
   const [categories, setCategories] = useState([])
-  const { showToast } = useToast()
+  const [fileLoading, setFileLoading] = useState(false)
+  const toast = useToast()
+  const fileInputRef = useRef(null)
 
-  const FALLBACK_CATEGORIES = ['Banner', 'Stickers', 'General Printing', 'Picture Frame', 'Apparel', 'Others']
-  const UNITS = ['ft', 'inch', 'cm', 'm']
+  const isImageFile = (urlOrFile) => {
+    const name = typeof urlOrFile === 'string' ? urlOrFile : urlOrFile?.name
+    if (!name) return false
+    const lower = name.toLowerCase()
+    return (
+      lower.endsWith('.png') ||
+      lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.webp') ||
+      lower.endsWith('.gif') ||
+      lower.endsWith('.svg') ||
+      lower.startsWith('data:image/')
+    )
+  }
 
-  // Load service categories from the company's configuration
+  const [companyCurrency, setCompanyCurrency] = useState('¢')
+
+  // Load service categories and services from the company's configuration
   useEffect(() => {
-    async function loadCategories() {
+    async function loadData() {
       if (!customer?.company_id) return
-      const { data } = await supabase
-        .from('service_categories')
-        .select('name')
-        .eq('company_id', customer.company_id)
-      if (data && data.length > 0) {
-        setCategories(data.map(c => c.name))
-        setForm(prev => ({ ...prev, category: data[0].name }))
-      } else {
-        setCategories(FALLBACK_CATEGORIES)
+      const [{ data: svcData }, { data: catData }, { data: compData }] = await Promise.all([
+        supabase.from('services').select('id,name,unit_price,service_category_id').eq('company_id', customer.company_id).neq('is_active', false),
+        supabase.from('service_categories').select('id,name').eq('company_id', customer.company_id).eq('is_active', true).order('name'),
+        supabase.from('companies').select('currency_symbol').eq('id', customer.company_id).single()
+      ])
+      setServices(svcData || [])
+      setCategories(catData || [])
+      if (compData?.currency_symbol) {
+        setCompanyCurrency(compData.currency_symbol)
       }
     }
-    loadCategories()
+    loadData()
   }, [customer?.company_id])
+
+  function toggleService(svc) {
+    setForm(f => {
+      const exists = f.selectedServices.some(s => (s.id || s) === svc.id)
+      if (exists) {
+        return { ...f, selectedServices: f.selectedServices.filter(s => (s.id || s) !== svc.id) }
+      } else {
+        return { ...f, selectedServices: [...f.selectedServices, svc] }
+      }
+    })
+  }
+
+  function isServiceSelected(svcId) {
+    return form.selectedServices.some(s => (s.id || s) === svcId)
+  }
+
+  // Group services by category
+  const servicesByCategory = categories.map(cat => ({
+    ...cat,
+    services: services.filter(s => s.service_category_id === cat.id)
+  })).filter(cat => cat.services.length > 0)
+
+  // Ungrouped services
+  const ungroupedServices = services.filter(s => !categories.some(c => c.id === s.service_category_id))
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
+      setFileLoading(true)
       const selected = Array.from(e.target.files)
-      setFiles(prev => {
-        const combined = [...prev, ...selected]
-        const unique = []
-        const keys = new Set()
-        for (const f of combined) {
-          const key = `${f.name}_${f.size}`
-          if (!keys.has(key)) {
-            keys.add(key)
-            unique.push(f)
+      
+      setTimeout(() => {
+        setFiles(prev => {
+          const combined = [...prev, ...selected]
+          const unique = []
+          const keys = new Set()
+          for (const f of combined) {
+            const key = `${f.name}_${f.size}`
+            if (!keys.has(key)) {
+              keys.add(key)
+              unique.push(f)
+            }
           }
-        }
-        return unique
-      })
+          return unique
+        })
+        setFileLoading(false)
+      }, 500)
       e.target.value = ''
     }
   }
@@ -75,6 +121,9 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
 
   // Primary: PHP upload (production server)
   async function uploadViaPhp(fileArray) {
+    setUploadProgress(30)
+    setUploadStep(`Sending ${fileArray.length} file(s) to server...`)
+    
     const formData = new FormData()
     fileArray.forEach(f => formData.append('images[]', f))
     formData.append('company_id', customer.company_id)
@@ -84,6 +133,9 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
     
     const response = await fetch(url, { method: 'POST', body: formData })
     
+    setUploadProgress(60)
+    setUploadStep('Analyzing server response...')
+    
     const contentType = response.headers.get('content-type') || ''
     if (!contentType.includes('application/json')) {
       throw new Error('PHP_UNAVAILABLE')
@@ -91,6 +143,8 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
     
     const data = await response.json()
     if (data.success && data.uploaded && data.uploaded.length > 0) {
+      setUploadProgress(75)
+      setUploadStep('Syncing attachments to job registry...')
       return data.uploaded.map(u => u.url)
     }
     throw new Error('Upload failed')
@@ -195,8 +249,12 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (files.length === 0) {
-      showToast('Please attach at least one file for your print job.', 'error')
+    if (form.selectedServices.length === 0) {
+      toast.error('Please select at least one service for your print job.')
+      return
+    }
+    if (files.length === 0 && existingImages.length === 0) {
+      toast.error('Please attach at least one file for your print job.')
       return
     }
 
@@ -204,21 +262,20 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
     setUploadProgress(5)
     setUploadStep('Initializing job upload...')
 
-    // Capture form values BEFORE any state resets so side effects have correct data
-    const capturedCategory = form.category
+    // Capture form values BEFORE any state resets
     const capturedNotes = form.notes
-    const capturedWidth = form.width
-    const capturedHeight = form.height
-    const capturedUnit = form.unit
-    const capturedQuantity = form.quantity
+    const capturedDescription = form.description
     const capturedFileCount = files.length
+    const capturedCategory = form.selectedServices.length > 0 
+      ? (form.selectedServices[0].name || form.selectedServices[0]) 
+      : 'General'
 
     try {
       const newFileUrls = await uploadFiles(files)
       const combinedImages = [...existingImages, ...newFileUrls]
 
       if (combinedImages.length === 0) {
-        showToast('Please attach at least one file for your print job.', 'error')
+        toast.error('Please attach at least one file for your print job.')
         setLoading(false)
         return
       }
@@ -226,13 +283,26 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
       setUploadProgress(80)
       setUploadStep(jobToEdit ? 'Updating your uploaded job...' : 'Submitting to shop Job List for review...')
 
-      const dimensionsDesc = capturedWidth && capturedHeight ? ` (${capturedWidth}x${capturedHeight} ${capturedUnit})` : ''
+      const capturedWidth = form.width
+      const capturedHeight = form.height
+      const capturedUnit = form.unit
+      
+      let baseDescription = form.description.trim()
+      if (!baseDescription && form.selectedServices.length > 0) {
+        baseDescription = form.selectedServices[0].name || form.selectedServices[0]
+      }
+      
+      let finalDescription = baseDescription
+      if (capturedWidth && capturedHeight) {
+        finalDescription = `${finalDescription} (${capturedWidth}x${capturedHeight} ${capturedUnit})`.trim()
+      }
+
       const payload = {
         company_id: customer.company_id,
         customer_id: customer.id,
-        services: [{ name: capturedCategory, unit_price: 0 }],
-        description: `${capturedCategory}${dimensionsDesc} - Qty: ${capturedQuantity}`,
-        notes: capturedNotes || '',
+        services: form.selectedServices,
+        description: finalDescription,
+        notes: form.notes || '',
         status: jobToEdit?.status || 'Pending',
         images: combinedImages
       }
@@ -263,21 +333,20 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
       setUploadStep(jobToEdit ? 'Update Complete!' : 'Upload Complete!')
 
       // Show success toast BEFORE closing
-      showToast(
+      toast.success(
         jobToEdit
           ? 'Uploaded job updated successfully!'
-          : 'Job uploaded to shop Job List successfully! The shop will review and convert it shortly.',
-        'success'
+          : 'Job uploaded to shop Job List successfully! The shop will review and convert it shortly.'
       )
 
       // Reset form state
       setForm({
-        category: categories[0] || 'General',
+        selectedServices: [],
+        description: '',
         notes: '',
         width: '',
         height: '',
-        unit: 'ft',
-        quantity: 1
+        unit: 'ft'
       })
       setFiles([])
       setExistingImages([])
@@ -289,7 +358,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
         if (onClose) onClose()
       }, 150)
 
-      // Fire-and-forget side effects using captured values (NOT state which was already reset)
+      // Fire-and-forget side effects using captured values
       ;(async () => {
         try {
           await recalculateCustomerBalance(customer.id).catch(() => {})
@@ -300,13 +369,13 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
             actorName: customer.name || 'Customer',
             actorRole: 'Customer',
             action: 'CUSTOMER_JOB_UPLOAD',
-            details: `Uploaded new staged job (${capturedCategory}) with ${capturedFileCount} file(s). Notes: "${capturedNotes || 'None'}"`
+            details: `Uploaded new staged job with ${capturedFileCount} file(s). Description: "${capturedDescription || 'None'}". Notes: "${capturedNotes || 'None'}"`
           })
 
           await supabase.from('notifications').insert({
             company_id: customer.company_id,
             title: 'New Customer Job Upload',
-            message: `${customer.name} uploaded a new ${capturedCategory} job to Job List with ${capturedFileCount} file(s). ${capturedNotes ? `Notes: "${capturedNotes}"` : ''}`,
+            message: `${customer.name} uploaded a new job with ${capturedFileCount} file(s). Description: "${capturedDescription || ''}". ${capturedNotes ? `Notes: "${capturedNotes}"` : ''}`,
             type: 'job_created',
             read: false
           }).catch(e => console.warn('Notification insert warn:', e))
@@ -340,7 +409,7 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
 
     } catch (err) {
       console.error('Job submit error:', err)
-      showToast(err.message || 'Failed to submit job.', 'error')
+      toast.error(err.message || 'Failed to submit job.')
       setLoading(false)
     }
   }
@@ -421,28 +490,122 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
         )}
         
         <form onSubmit={handleSubmit} className="modal-body" style={{ padding: '24px 32px' }}>
+          {/* Services Selection (Checkboxes) */}
           <div className="form-group">
-            <label className="form-label">Job Category</label>
-            <select
-              className="form-control"
-              value={form.category}
-              onChange={e => setForm({...form, category: e.target.value})}
-              disabled={loading}
-            >
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <label className="form-label">Services * <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>({form.selectedServices.length} selected)</span></label>
+            
+            <div style={{ border: '1px solid var(--border)', borderRadius: '10px', maxHeight: '200px', overflowY: 'auto' }}>
+              {servicesByCategory.map(cat => (
+                <div key={cat.id}>
+                  <div style={{ padding: '8px 14px', background: '#f8fafc', fontSize: '12px', fontWeight: 600, color: '#475569', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0 }}>
+                    {cat.name}
+                  </div>
+                  {cat.services.map(svc => (
+                    <button
+                      type="button"
+                      key={svc.id}
+                      onClick={() => toggleService(svc)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        width: '100%',
+                        padding: '10px 14px',
+                        border: 'none',
+                        borderBottom: '1px solid #f1f5f9',
+                        background: isServiceSelected(svc.id) ? '#eff6ff' : 'white',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'background 0.1s'
+                      }}
+                    >
+                      {isServiceSelected(svc.id) ? (
+                        <CheckSquare size={16} color="#2563eb" />
+                      ) : (
+                        <Square size={16} color="#cbd5e1" />
+                      )}
+                      <span style={{ flex: 1, fontSize: '13px', fontWeight: isServiceSelected(svc.id) ? 600 : 400, color: isServiceSelected(svc.id) ? '#1e40af' : '#334155' }}>
+                        {svc.name}
+                      </span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                        {companyCurrency}{svc.unit_price?.toFixed(2)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+              {ungroupedServices.length > 0 && (
+                <div>
+                  <div style={{ padding: '8px 14px', background: '#f8fafc', fontSize: '12px', fontWeight: 600, color: '#475569', borderBottom: '1px solid var(--border)' }}>
+                    Other Services
+                  </div>
+                  {ungroupedServices.map(svc => (
+                    <button
+                      type="button"
+                      key={svc.id}
+                      onClick={() => toggleService(svc)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        width: '100%',
+                        padding: '10px 14px',
+                        border: 'none',
+                        borderBottom: '1px solid #f1f5f9',
+                        background: isServiceSelected(svc.id) ? '#eff6ff' : 'white',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'background 0.1s'
+                      }}
+                    >
+                      {isServiceSelected(svc.id) ? (
+                        <CheckSquare size={16} color="#2563eb" />
+                      ) : (
+                        <Square size={16} color="#cbd5e1" />
+                      )}
+                      <span style={{ flex: 1, fontSize: '13px', fontWeight: isServiceSelected(svc.id) ? 600 : 400, color: isServiceSelected(svc.id) ? '#1e40af' : '#334155' }}>
+                        {svc.name}
+                      </span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                        {companyCurrency}{svc.unit_price?.toFixed(2)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {services.length === 0 && (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  No services configured.
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="form-row-3" style={{ marginBottom: '16px' }}>
+          {/* Selected Services Summary */}
+          {form.selectedServices.length > 0 && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#166534', marginBottom: '6px' }}>Selected Services:</div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {form.selectedServices.map((s, i) => (
+                  <span key={i} style={{ padding: '4px 10px', background: '#dcfce7', color: '#166534', borderRadius: '6px', fontSize: '12px', fontWeight: 500 }}>
+                    {s.name || s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Dimensions (Optional) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">Width (Optional)</label>
               <input 
                 type="number" 
                 step="0.01" 
                 className="form-control" 
-                placeholder="e.g. 10" 
+                placeholder="Width" 
                 value={form.width} 
-                onChange={e => setForm({...form, width: e.target.value})} 
+                onChange={e => setForm(f => ({ ...f, width: e.target.value }))} 
                 disabled={loading}
               />
             </div>
@@ -452,83 +615,159 @@ export default function CustomerJobUploadModal({ onClose, onSuccess, customer, j
                 type="number" 
                 step="0.01" 
                 className="form-control" 
-                placeholder="e.g. 5" 
+                placeholder="Height" 
                 value={form.height} 
-                onChange={e => setForm({...form, height: e.target.value})} 
+                onChange={e => setForm(f => ({ ...f, height: e.target.value }))} 
                 disabled={loading}
               />
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">Unit</label>
-              <select className="form-control" value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} disabled={loading}>
-                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+              <select className="form-control" value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} disabled={loading}>
+                <option value="ft">ft</option>
+                <option value="in">in</option>
+                <option value="cm">cm</option>
+                <option value="m">m</option>
               </select>
             </div>
           </div>
 
+          {/* Description */}
           <div className="form-group">
-            <label className="form-label">Quantity</label>
-            <input 
-              type="number" 
+            <label className="form-label">Description <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span></label>
+            <textarea 
               className="form-control" 
-              min="1" 
-              value={form.quantity} 
-              onChange={e => setForm({...form, quantity: e.target.value})} 
+              placeholder="Describe your job details, sizes, quantities, and instructions..." 
+              value={form.description} 
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               disabled={loading}
+              rows={3}
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Design Files (PDF, JPG, TIFF, PNG, JPEG)</label>
+            <label className="form-label">Files <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>(PDF, TIFF, TIF, JPG, JPEG, PNG, etc.)</span></label>
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              onChange={handleFileChange} 
+              accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif"
+              multiple
+              disabled={loading}
+              style={{ display: 'none' }} 
+            />
             
-            <div style={{
-              border: '2px dashed var(--border)',
-              borderRadius: '8px',
-              padding: '32px',
-              textAlign: 'center',
-              backgroundColor: 'var(--bg-light)',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              position: 'relative',
-              marginBottom: '12px'
-            }}>
-              <input 
-                type="file" 
-                multiple
-                onChange={handleFileChange} 
-                accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif"
-                disabled={loading}
-                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: loading ? 'not-allowed' : 'pointer', zIndex: 10 }} 
-              />
-              <Upload size={32} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
-              <p style={{ margin: 0, fontWeight: 500, fontSize: '15px' }}>Click or drag files to upload</p>
-              <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>Upload should not exceed 50MB. Quality is preserved.</p>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: existingImages.length > 0 || files.length > 0 ? '12px' : 0 }}>
+              {/* Existing files */}
+              {existingImages.map((url, i) => {
+                const isImg = isImageFile(url)
+                const imgSrc = window.location.hostname === 'localhost' && !url.startsWith('http') ? `http://localhost${url}` : url
+                const fileName = url.split('/').pop().split('?')[0]
+                return (
+                  <div key={`existing-${i}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', width: '80px' }}>
+                    <div style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {isImg ? (
+                        <img src={imgSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '4px' }}>
+                          <FileText size={24} color="#64748b" />
+                        </div>
+                      )}
+                      <button type="button" onClick={() => removeExistingImage(i)} disabled={loading} style={{ position: 'absolute', top: '2px', right: '2px', background: 'rgba(220,38,38,0.9)', border: 'none', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 5 }}>
+                        <X size={12} color="white" />
+                      </button>
+                    </div>
+                    <span 
+                      style={{ 
+                        fontSize: '10px', 
+                        color: 'var(--text-secondary)', 
+                        textAlign: 'center', 
+                        maxWidth: '80px', 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis', 
+                        whiteSpace: 'nowrap',
+                        fontWeight: 500
+                      }} 
+                      title={fileName}
+                    >
+                      {fileName}
+                    </span>
+                  </div>
+                )
+              })}
+              {/* New file previews */}
+              {files.map((file, i) => {
+                const isImg = isImageFile(file)
+                const fileName = file.name
+                return (
+                  <div key={`new-${i}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', width: '80px' }}>
+                    <div style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #bfdbfe', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {isImg ? (
+                        <img src={URL.createObjectURL(file)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '4px' }}>
+                          <FileText size={24} color="#3b82f6" />
+                        </div>
+                      )}
+                      <button type="button" onClick={() => removeFile(i)} disabled={loading} style={{ position: 'absolute', top: '2px', right: '2px', background: 'rgba(220,38,38,0.9)', border: 'none', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 5 }}>
+                        <X size={12} color="white" />
+                      </button>
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(37,99,235,0.85)', color: 'white', fontSize: '9px', textAlign: 'center', padding: '2px' }}>NEW</div>
+                    </div>
+                    <span 
+                      style={{ 
+                        fontSize: '10px', 
+                        color: 'var(--text-secondary)', 
+                        textAlign: 'center', 
+                        maxWidth: '80px', 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis', 
+                        whiteSpace: 'nowrap',
+                        fontWeight: 500
+                      }} 
+                      title={fileName}
+                    >
+                      {fileName}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
 
-            {files.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
-                {files.map((f, i) => (
-                  <div key={i} style={{
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                    padding: '10px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    backgroundColor: 'var(--bg-light)'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
-                      <FileIcon size={20} style={{ color: 'var(--primary)' }} />
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px', fontWeight: 500 }}>
-                        {f.name}
-                      </span>
-                    </div>
-                    <button type="button" onClick={() => removeFile(i)} disabled={loading} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', padding: '4px' }}>
-                      <XCircle size={18} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <button 
+              type="button" 
+              onClick={() => fileInputRef.current?.click()} 
+              disabled={loading || fileLoading} 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                padding: '10px 16px', 
+                border: '2px dashed #cbd5e1', 
+                borderRadius: '10px', 
+                background: '#f8fafc', 
+                cursor: (loading || fileLoading) ? 'not-allowed' : 'pointer', 
+                width: '100%', 
+                justifyContent: 'center', 
+                color: '#475569', 
+                fontSize: '13px', 
+                transition: 'all 0.15s' 
+              }}
+              onMouseEnter={e => { if(!loading && !fileLoading) { e.currentTarget.style.borderColor = '#2563eb'; e.currentTarget.style.background = '#eff6ff' } }}
+              onMouseLeave={e => { if(!loading && !fileLoading) { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#f8fafc' } }}
+            >
+              {fileLoading ? (
+                <>
+                  <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                  <span>Processing & generating thumbnails...</span>
+                </>
+              ) : (
+                <>
+                  <Plus size={18} />
+                  {existingImages.length + files.length > 0 ? 'Add More Files' : 'Click to Upload Files'}
+                </>
+              )}
+            </button>
           </div>
 
           <div className="form-group" style={{ marginTop: '16px' }}>

@@ -126,6 +126,7 @@ export default function CustomersPage() {
   const [generatingBulk, setGeneratingBulk] = useState(false)
   const itemsPerPage = 20
   const toast = useToast()
+  const { confirm } = useConfirm()
 
   useEffect(() => { if (company) load() }, [company])
 
@@ -378,6 +379,25 @@ export default function CustomersPage() {
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedCustomers = filtered.slice(startIndex, startIndex + itemsPerPage)
 
+  const getCustomerTypeClass = (typeName) => {
+    if (!typeName) return 'pill-gray'
+    const name = typeName.toLowerCase()
+    if (name.includes('reseller') || name.includes('artist')) return 'pill-blue'
+    if (name.includes('corporate') || name.includes('commercial')) return 'pill-purple'
+    if (name.includes('vip')) return 'pill-orange'
+    if (name.includes('retail')) return 'pill-green'
+    if (name.includes('agency')) return 'pill-cyan'
+    if (name.includes('walk-in')) return 'pill-gray'
+    
+    const colors = ['pill-blue', 'pill-purple', 'pill-green', 'pill-orange', 'pill-teal', 'pill-cyan', 'pill-indigo']
+    let hash = 0
+    for (let i = 0; i < typeName.length; i++) {
+      hash = typeName.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    const index = Math.abs(hash) % colors.length
+    return colors[index]
+  }
+
   const currency = company?.currency_symbol || '¢'
 
   return (
@@ -482,7 +502,7 @@ export default function CustomersPage() {
                       <span style={{fontWeight:600}}>{c.name}</span>
                     </div>
                   </td>
-                  <td><span className="pill pill-blue">{c.customer_types?.name || '-'}</span></td>
+                  <td><span className={`pill ${getCustomerTypeClass(c.customer_types?.name)}`}>{c.customer_types?.name || '-'}</span></td>
                   <td style={{fontSize:'13px'}}>{c.phone ? <span style={{display:'flex',alignItems:'center',gap:'4px'}}><Phone size={12}/>{c.phone}</span> : '-'}</td>
                   <td style={{fontSize:'13px'}}>{c.email ? <span style={{display:'flex',alignItems:'center',gap:'4px'}}><Mail size={12}/>{c.email}</span> : '-'}</td>
                   <td style={{fontWeight:600,color: (c.balance||0) > 0 ? 'var(--error)' : 'inherit'}}>{currency}{(c.balance||0).toFixed(2)}</td>

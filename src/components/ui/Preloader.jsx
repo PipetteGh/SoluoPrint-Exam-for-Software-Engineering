@@ -37,14 +37,14 @@ export default function Preloader({ fullScreen = false, message = null, style = 
 
         {/* Brand Logo Right Underneath Spinner */}
         <div style={{ display: imgLoaded || imgError ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', width: '100%', maxWidth: '85vw', marginTop: '-18px' }}>
-          <img 
-            src="/logo.png" 
-            alt="SoluoPrint Logo" 
-            style={{ 
-              height: '140px', 
-              maxHeight: '190px', 
-              maxWidth: '480px', 
-              width: '85vw', 
+          <img
+            src="/logo.png"
+            alt="SoluoPrint Logo"
+            style={{
+              height: '140px',
+              maxHeight: '190px',
+              maxWidth: '480px',
+              width: '85vw',
               objectFit: 'contain',
               display: imgLoaded && !imgError ? 'block' : 'none'
             }}
@@ -54,16 +54,16 @@ export default function Preloader({ fullScreen = false, message = null, style = 
             }}
           />
           {imgError && (
-            <div 
-              className="brand-logo-fallback" 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '12px', 
-                fontWeight: 800, 
-                fontSize: '36px', 
-                color: '#1e293b', 
-                letterSpacing: '-1px' 
+            <div
+              className="brand-logo-fallback"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                fontWeight: 800,
+                fontSize: '36px',
+                color: '#1e293b',
+                letterSpacing: '-1px'
               }}
             >
               <div style={{
