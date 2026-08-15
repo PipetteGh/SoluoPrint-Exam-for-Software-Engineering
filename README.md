@@ -1,3 +1,13 @@
+# Developer Profile
+- **Name:** Peter Borngreat-Mensah
+- **Student ID:** 22424679
+- **Institution:** University of Ghana
+- **College:** College of Physical and Mathematical Sciences
+- **Department:** Department of Computer Science
+- **Programme:** Master of Science in Computer Science
+
+---
+
 # SoluoPrint - Advanced Print Shop Management System
 
 **SoluoPrint** is a premium, all-in-one management platform designed specifically for modern print shops and digital studios. It streamlines the entire production workflow from customer intake to invoicing, drastically reducing administrative workload and production errors.
