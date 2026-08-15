@@ -28,10 +28,10 @@ if (!$to || !$message) {
 }
 
 // Namecheap SMTP Details
-$smtp_server = 'premium237.web-hosting.com';
+$smtp_server = 'Add-Your-SMTP-Email-Account';
 $smtp_port = 465;
-$smtp_user = 'notify@soluotech.com';
-$smtp_pass = '7]5*MEWet1MX';
+$smtp_user = 'Your-Email-Account';
+$smtp_pass = 'Email-Password';
 
 // A simple function to send email via SMTP socket in PHP without PHPMailer
 function send_smtp_mail($to, $subject, $message, $senderName, $smtp_server, $smtp_port, $smtp_user, $smtp_pass) {
