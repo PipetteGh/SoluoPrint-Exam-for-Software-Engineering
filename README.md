@@ -2,7 +2,7 @@
 - **Name:** Peter Borngreat-Mensah
 - **Student ID:** 22424679
 - **Institution:** University of Ghana
-- **College:** College of Physical and Mathematical Sciences
+- **College:** College of Basic and Applied Sciences
 - **Department:** Department of Computer Science
 - **Programme:** Master of Science in Computer Science
 
